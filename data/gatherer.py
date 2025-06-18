@@ -97,9 +97,12 @@ class MarketAuxGatherer(DataGatherer):
             response.raise_for_status()
             data = response.json()
 
-            path = self._save_raw_json(data, published_on=published_on)
-            logger.debug(f"Saved raw data to {path}")
-            logger.debug(f"Fetched {len(data.get('data', []))} articles for {self.symbols}")
+            articles = data.get("data", [])
+            if articles:
+                path = self._save_raw_json(data, published_on=published_on)
+                logger.debug(f"Saved raw data to {path}")
+            else:
+                logger.debug(f"No articles found for {self.symbols} on {published_on or 'today'}, skipping save.")
 
             return data
         except requests.Timeout:
