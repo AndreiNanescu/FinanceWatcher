@@ -30,14 +30,21 @@ def parse_args():
         default=1,
         help="Number of days in the past to fetch data for. 1 means today only."
     )
+    parser.add_argument(
+        "--save_data",
+        type=bool,
+        default=False,
+        help="Wherever to save the raw data or not."
+    )
     return parser.parse_args()
 
 
 class DataGatherer(ABC):
-    def __init__(self, symbols: List[str]):
+    def __init__(self, symbols: List[str], save_data: bool = False):
         if not symbols or not all(isinstance(s, str) for s in symbols):
             raise ValueError("Symbols must be a non-empty list of strings.")
         self.symbols = symbols
+        self.save_data = save_data
 
     @abstractmethod
     def _save_raw_json(self, data: dict, base_dir: str = "./raw") -> str:
@@ -49,8 +56,8 @@ class DataGatherer(ABC):
 
 
 class MarketAuxGatherer(DataGatherer):
-    def __init__(self, symbols: List[str], language: str = "en", filter_entities: bool = True, limit: int = 3):
-        super().__init__(symbols)
+    def __init__(self, symbols: List[str], save_data: bool = False, language: str = "en", filter_entities: bool = True, limit: int = 3):
+        super().__init__(symbols, save_data)
         self.language = language
         self.filter_entities = filter_entities
         self.limit = limit
@@ -98,7 +105,7 @@ class MarketAuxGatherer(DataGatherer):
             data = response.json()
 
             articles = data.get("data", [])
-            if articles:
+            if articles and self.save_data:
                 path = self._save_raw_json(data, published_on=published_on)
                 logger.debug(f"Saved raw data to {path}")
             else:
@@ -127,12 +134,8 @@ class MarketAuxGatherer(DataGatherer):
                 all_data.append(data)
         return all_data
 
-def main():
-    args = parse_args()
-    symbols = args.symbols
-    days = args.days
-
-    gatherer = MarketAuxGatherer(symbols=symbols)
+def main(symbols: List[str], days: int = 1, save_data: bool = False):
+    gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
 
     if days == 1:
         data = gatherer.get_data()
@@ -146,4 +149,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(symbols=args.symbols,
+         days=args.days,
+         save_data=args.save_data)
