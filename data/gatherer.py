@@ -5,15 +5,12 @@ import requests
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from typing import Dict, List, Optional
-from utils import setup_logger, save_dict_as_json
+from typing import Dict, List, Optional, Union
+from utils import setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV
 from pathlib import Path
 
 logger = setup_logger(__name__)
 load_dotenv()
-
-MARKETAUX_API_KEY_ENV = "MARKETAUX_API_KEY"
-MARKETAUX_BASE_URL_ENV = "MARKETAUX_BASE_URL"
 
 
 def parse_args():
@@ -31,10 +28,9 @@ def parse_args():
         help="Number of days in the past to fetch data for. 1 means today only."
     )
     parser.add_argument(
-        "--save_data",
-        type=bool,
-        default=False,
-        help="Wherever to save the raw data or not."
+        "--save-data",
+        action="store_true",
+        help="Save the raw data or not."
     )
     return parser.parse_args()
 
@@ -112,15 +108,22 @@ class MarketAuxGatherer(DataGatherer):
                 logger.debug(f"No articles found for {self.symbols} on {published_on or 'today'}, skipping save.")
 
             return data
+
         except requests.Timeout:
             logger.error("Request timed out")
-            return None
-        except requests.HTTPError as e:
-            logger.error(f"API error: {e.response.status_code}")
-            return None
+            raise StopFetching("Timeout occurred, stopping fetching.")
+
+
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 402:
+                logger.error("API request limit reached (HTTP 402). Stopping further requests.")
+            else:
+                logger.error(f"API error: {e.response.status_code if e.response else 'unknown status'}")
+            raise StopFetching("HTTP error occurred, stopping fetching.")
+
         except requests.RequestException as e:
             logger.error(f"Unexpected request error: {e}")
-            return None
+            raise StopFetching("Request error occurred, stopping fetching.")
 
     def get_data(self) -> Optional[Dict]:
         return self._request_data()
@@ -129,24 +132,33 @@ class MarketAuxGatherer(DataGatherer):
         all_data = []
         for day_delta in range(days):
             date_str = (datetime.utcnow() - timedelta(days=day_delta)).strftime("%Y-%m-%d")
-            data = self._request_data(published_on=date_str)
+            try:
+                data = self._request_data(published_on=date_str)
+            except StopFetching as e:
+                logger.info(f"Stopped fetching historical data early due to API error: {e}")
+                break
+
             if data:
                 all_data.append(data)
+            else:
+                logger.debug(f"No data for {date_str}, continuing to next date...")
+
         return all_data
 
-def main(symbols: List[str], days: int = 1, save_data: bool = False):
+def main(symbols: List[str], days: int = 1, save_data: bool = False) -> Optional[Union[List[Dict], Dict]]:
     gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
 
     if days == 1:
         data = gatherer.get_data()
         count = len(data.get('data', [])) if data else 0
         logger.info(f"Fetched {count} articles for symbols {symbols}")
+        return data
     else:
         all_data = gatherer.get_historical_data(days=days)
         total_articles = sum(len(batch.get('data', [])) for batch in all_data if batch)
         logger.info(
-            f"Fetched historical data for {days} days, total batches: {len(all_data)}, total articles: {total_articles}")
-
+            f"Fetched historical data for {len(all_data)} days (requested {days}), total articles: {total_articles}")
+        return all_data
 
 if __name__ == "__main__":
     args = parse_args()
