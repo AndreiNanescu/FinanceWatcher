@@ -5,7 +5,7 @@ import requests
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from typing import List, Optional
+from typing import Dict, List, Optional
 from utils import setup_logger, save_dict_as_json
 from pathlib import Path
 
@@ -70,7 +70,7 @@ class MarketAuxGatherer(DataGatherer):
         save_dict_as_json(data, filepath)
         return str(filepath)
 
-    def get_data(self, published_on: Optional[str] = None) -> Optional[dict]:
+    def _request_data(self, published_on: Optional[str] = None) -> Optional[dict]:
         api_key = os.getenv(MARKETAUX_API_KEY_ENV)
         url = os.getenv(MARKETAUX_BASE_URL_ENV)
         if not api_key or not url:
@@ -97,9 +97,9 @@ class MarketAuxGatherer(DataGatherer):
             response.raise_for_status()
             data = response.json()
 
-            path = self._save_raw_json(data)
-            logger.info(f"Saved raw data to {path}")
-            logger.info(f"Fetched {len(data.get('data', []))} articles for {self.symbols}")
+            path = self._save_raw_json(data, published_on=published_on)
+            logger.debug(f"Saved raw data to {path}")
+            logger.debug(f"Fetched {len(data.get('data', []))} articles for {self.symbols}")
 
             return data
         except requests.Timeout:
@@ -112,19 +112,34 @@ class MarketAuxGatherer(DataGatherer):
             logger.error(f"Unexpected request error: {e}")
             return None
 
+    def get_data(self) -> Optional[Dict]:
+        return self._request_data()
+
+    def get_historical_data(self, days: int) -> List[Dict]:
+        all_data = []
+        for day_delta in range(days):
+            date_str = (datetime.utcnow() - timedelta(days=day_delta)).strftime("%Y-%m-%d")
+            data = self._request_data(published_on=date_str)
+            if data:
+                all_data.append(data)
+        return all_data
+
 def main():
     args = parse_args()
     symbols = args.symbols
     days = args.days
 
-    gatherer = MarketAuxGatherer(symbols)
+    gatherer = MarketAuxGatherer(symbols=symbols)
 
-    for day_offset in range(days):
-        target_date = (datetime.utcnow() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
-        logger.info(f"Fetching articles for date: {target_date}")
-        data = gatherer.get_data(published_on=target_date)
-        if data is None:
-            logger.warning(f"No data fetched for date {target_date}")
+    if days == 1:
+        data = gatherer.get_data()
+        count = len(data.get('data', [])) if data else 0
+        logger.info(f"Fetched {count} articles for symbols {symbols}")
+    else:
+        all_data = gatherer.get_historical_data(days=days)
+        total_articles = sum(len(batch.get('data', [])) for batch in all_data if batch)
+        logger.info(
+            f"Fetched historical data for {days} days, total batches: {len(all_data)}, total articles: {total_articles}")
 
 
 if __name__ == "__main__":
