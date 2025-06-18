@@ -67,7 +67,7 @@ class MarketAuxGatherer(DataGatherer):
         symbol_str = "_".join(s.replace("/", "-") for s in self.symbols)[:50]
         filename = f"marketaux_{symbol_str}_{timestamp}.json"
 
-        base_dir = base_dir or "data/raw"
+        base_dir = base_dir or "raw"
         filepath = Path(base_dir) / filename
 
         save_dict_as_json(data, filepath)
@@ -102,17 +102,13 @@ class MarketAuxGatherer(DataGatherer):
 
             articles = data.get("data", [])
             if articles and self.save_data:
-                path = self._save_raw_json(data, published_on=published_on)
-                logger.debug(f"Saved raw data to {path}")
-            else:
-                logger.debug(f"No articles found for {self.symbols} on {published_on or 'today'}, skipping save.")
+                self._save_raw_json(data, published_on=published_on)
 
             return data
 
         except requests.Timeout:
             logger.error("Request timed out")
             raise StopFetching("Timeout occurred, stopping fetching.")
-
 
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 402:
@@ -140,8 +136,6 @@ class MarketAuxGatherer(DataGatherer):
 
             if data:
                 all_data.append(data)
-            else:
-                logger.debug(f"No data for {date_str}, continuing to next date...")
 
         return all_data
 
@@ -149,16 +143,9 @@ def main(symbols: List[str], days: int = 1, save_data: bool = False) -> Optional
     gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
 
     if days == 1:
-        data = gatherer.get_data()
-        count = len(data.get('data', [])) if data else 0
-        logger.info(f"Fetched {count} articles for symbols {symbols}")
-        return data
+        return gatherer.get_data()
     else:
-        all_data = gatherer.get_historical_data(days=days)
-        total_articles = sum(len(batch.get('data', [])) for batch in all_data if batch)
-        logger.info(
-            f"Fetched historical data for {len(all_data)} days (requested {days}), total articles: {total_articles}")
-        return all_data
+        return gatherer.get_historical_data(days=days)
 
 if __name__ == "__main__":
     args = parse_args()
