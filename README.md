@@ -57,12 +57,6 @@ FinanceWatcher is an AI-powered utility that analyzes financial news and social 
 
 ---
 
-## 📄 License
-
-Private repository — for personal or academic use only.
-
----
-
 ## 👤 Author
 
 FinanceWatcher by [Andrei Nanescu]
