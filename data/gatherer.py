@@ -32,6 +32,12 @@ def parse_args():
         action="store_true",
         help="Save the raw data or not."
     )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=1,
+        help="Number of pages to fetch for each day."
+    )
     return parser.parse_args()
 
 
@@ -73,7 +79,7 @@ class MarketAuxGatherer(DataGatherer):
         save_dict_as_json(data, filepath)
         return str(filepath)
 
-    def _request_data(self, published_on: Optional[str] = None) -> Optional[dict]:
+    def _request_data(self, published_on: Optional[str] = None, page: int = 1) -> Optional[dict]:
         api_key = os.getenv(MARKETAUX_API_KEY_ENV)
         url = os.getenv(MARKETAUX_BASE_URL_ENV)
         if not api_key or not url:
@@ -121,34 +127,57 @@ class MarketAuxGatherer(DataGatherer):
             logger.error(f"Unexpected request error: {e}")
             raise StopFetching("Request error occurred, stopping fetching.")
 
-    def get_data(self) -> Optional[Dict]:
-        return self._request_data()
+    def get_data(self, max_pages: int = 1) -> Optional[Dict]:
+        all_articles = []
+        for page in range(1, max_pages + 1):
+            data = self._request_data(page=page)
+            if not data:
+                break
 
-    def get_historical_data(self, days: int) -> List[Dict]:
+            articles = data.get("data", [])
+            if not articles:
+                break
+
+            all_articles.extend(articles)
+
+            if len(articles) < self.limit:
+                break
+
+        return all_articles if all_articles else None
+
+    def get_historical_data(self, days: int, max_pages_per_day: int = 1) -> List[Dict]:
         all_data = []
         for day_delta in range(days):
             date_str = (datetime.utcnow() - timedelta(days=day_delta)).strftime("%Y-%m-%d")
-            try:
-                data = self._request_data(published_on=date_str)
-            except StopFetching as e:
-                logger.info(f"Stopped fetching historical data early due to API error: {e}")
-                break
-
-            if data:
+            for page in range(1, max_pages_per_day + 1):
+                try:
+                    data = self._request_data(published_on=date_str, page=page)
+                except StopFetching as e:
+                    logger.info(f"Stopped fetching historical data early due to API error: {e}")
+                    break
+                if not data:
+                    break
+                articles = data.get("data", [])
+                if not articles:
+                    break
                 all_data.append(data)
+
+                if len(articles) < self.limit:
+                    break
 
         return all_data
 
-def main(symbols: List[str], days: int = 1, save_data: bool = False) -> Optional[Union[List[Dict], Dict]]:
+def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1) -> Optional[Union[List[Dict], Dict]]:
     gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
 
     if days == 1:
-        return gatherer.get_data()
+        return gatherer.get_data(max_pages=max_pages)
     else:
-        return gatherer.get_historical_data(days=days)
+        return gatherer.get_historical_data(days=days, max_pages_per_day=max_pages)
 
 if __name__ == "__main__":
     args = parse_args()
     main(symbols=args.symbols,
          days=args.days,
-         save_data=args.save_data)
+         save_data=args.save_data,
+         max_pages=args.max_pages)

@@ -54,6 +54,12 @@ def parse_args():
         action="store_true",
         help="Whether to save the raw data or not."
     )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=1,
+        help="Number of pages to fetch for each day."
+    )
     return parser.parse_args()
 
 
@@ -124,32 +130,44 @@ class MarketNewsDB:
             if isinstance(source, dict):
                 source = source.get("domain", "")
 
+            entities = [
+                Entity(
+                    article_uuid=article_json["uuid"],
+                    symbol=entity_json.get("symbol", ""),
+                    name=entity_json.get("name", ""),
+                    raw_sentiment=float(entity_json.get("sentiment_score", 0.0)),
+                    industry=entity_json.get("industry")
+                )
+                for entity_json in article_json.get("entities", [])
+                if entity_json
+            ]
+
             return Article(
                 uuid=article_json["uuid"],
-                title=article_json.get("title"),
-                description=article_json.get("description"),
-                url=article_json.get("url"),
-                published_at=article_json.get("published_at"),
+                title=article_json.get("title", ""),
+                description=article_json.get("description", ""),
+                url=article_json.get("url", ""),
+                published_at=article_json.get("published_at", ""),
                 source=source,
-                entities=article_json.get("entities", [])
+                entities=entities
             )
-        except KeyError as e:
-            logger.error(f"Missing required field in article: {e}")
+
+        except (KeyError, ValueError) as e:
+            logger.error(f"Error parsing article: {e}")
             raise
 
     @staticmethod
     def _parse_entity(article_uuid: str, entity_json: Dict) -> Entity:
         try:
-            raw_score = float(entity_json.get("sentiment_score", 0.0))
-            return Entity.from_raw_score(
+            return Entity(
                 article_uuid=article_uuid,
-                symbol=entity_json.get("symbol"),
-                score=raw_score,
-                name=entity_json.get("name"),
+                symbol=entity_json.get("symbol", ""),
+                name=entity_json.get("name", ""),
+                raw_sentiment=float(entity_json.get("sentiment_score", 0.0)),
                 industry=entity_json.get("industry")
             )
-        except (KeyError, ValueError) as e:
-            logger.error(f"Error parsing entity: {e}")
+        except ValueError as e:
+            logger.error(f"Invalid sentiment score in entity: {e}")
             raise
 
     def add_articles(self, data: Union[Dict, List[Dict]]) -> None:
@@ -188,14 +206,13 @@ class MarketNewsDB:
                         article.source,
                     ))
 
-                    for entity_json in article.entities:
+                    for entity in article.entities:
                         self.entities_processed += 1
-                        entity = self._parse_entity(article.uuid, entity_json)
                         entity_records.append((
                             article.uuid,
                             entity.symbol,
                             entity.name,
-                            entity.sentiment,
+                            entity.formatted_sentiment,
                             entity.industry,
                         ))
 
@@ -249,10 +266,10 @@ class MarketNewsDB:
             logger.error(f"Unexpected error loading tables: {e}")
             raise
 
-def main(symbols: List[str], days: int = 1, save_data: bool = False):
-    logger.info(f"Starting processing for symbols: {symbols} over {days} days")
+def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1):
+    logger.info(f"Starting processing for symbols: {symbols} over {days} days, with {max_pages} pages per day.")
     try:
-        data = get_data(symbols=symbols, days=days, save_data=save_data)
+        data = get_data(symbols=symbols, days=days, save_data=save_data, max_pages=max_pages)
         if not data:
             logger.warning("No data received from gatherer")
             return
@@ -275,7 +292,8 @@ if __name__ == "__main__":
         main(
             symbols=args.symbols,
             days=args.days,
-            save_data=args.save_data
+            save_data=args.save_data,
+            max_pages=args.max_pages
         )
     except Exception as e:
         logger.error(f"Application failed: {e}")
