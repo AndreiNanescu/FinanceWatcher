@@ -1,9 +1,9 @@
 import argparse
 import sqlite3
-from dataclasses import dataclass
+
 from pathlib import Path
-from typing import Union, List, Dict, Optional
-from utils import setup_logger
+from typing import Union, List, Dict
+from utils import setup_logger, Entity, Article
 from gatherer import main as get_data
 
 logger = setup_logger(__name__)
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS entities (
     article_uuid TEXT,
     symbol TEXT,
     name TEXT,
-    sentiment_score REAL,
+    sentiment TEXT,
     industry TEXT,
     FOREIGN KEY(article_uuid) REFERENCES articles(uuid) ON DELETE CASCADE,
     UNIQUE(article_uuid, symbol) 
@@ -53,17 +53,6 @@ def parse_args():
         help="Whether to save the raw data or not."
     )
     return parser.parse_args()
-
-
-@dataclass
-class Article:
-    uuid: str
-    title: Optional[str]
-    description: Optional[str]
-    url: Optional[str]
-    published_at: Optional[str]
-    source: Optional[str]
-    entities: Optional[List[Dict]] = None
 
 
 class MarketNewsDB:
@@ -145,8 +134,20 @@ class MarketNewsDB:
         except KeyError as e:
             logger.error(f"Missing required field in article: {e}")
             raise
-        except Exception as e:
-            logger.error(f"Unexpected error parsing article: {e}")
+
+    @staticmethod
+    def _parse_entity(article_uuid: str, entity_json: Dict) -> Entity:
+        try:
+            raw_score = float(entity_json.get("sentiment_score", 0.0))
+            return Entity.from_raw_score(
+                article_uuid=article_uuid,
+                symbol=entity_json.get("symbol"),
+                score=raw_score,
+                name=entity_json.get("name"),
+                industry=entity_json.get("industry")
+            )
+        except (KeyError, ValueError) as e:
+            logger.error(f"Error parsing entity: {e}")
             raise
 
     def add_articles(self, data: Union[Dict, List[Dict]]) -> None:
@@ -185,14 +186,15 @@ class MarketNewsDB:
                         article.source,
                     ))
 
-                    for entity in article.entities:
+                    for entity_json in article.entities:
                         self.entities_processed += 1
+                        entity = self._parse_entity(article.uuid, entity_json)
                         entity_records.append((
                             article.uuid,
-                            entity.get("symbol"),
-                            entity.get("name"),
-                            entity.get("sentiment_score", 0.0),
-                            entity.get("industry", ""),
+                            entity.symbol,
+                            entity.name,
+                            entity.sentiment,
+                            entity.industry,
                         ))
 
                 except Exception as e:
@@ -213,7 +215,7 @@ class MarketNewsDB:
                 if entity_records:
                     cursor = self.conn.executemany('''
                         INSERT OR IGNORE INTO entities 
-                        (article_uuid, symbol, name, sentiment_score, industry)
+                        (article_uuid, symbol, name, sentiment, industry)
                         VALUES (?, ?, ?, ?, ?)
                     ''', entity_records)
                     self.entities_inserted = cursor.rowcount
