@@ -1,6 +1,8 @@
 import argparse
 import sqlite3
 
+import pandas as pd
+
 from pathlib import Path
 from typing import Union, List, Dict
 from utils import setup_logger, Entity, Article
@@ -230,6 +232,22 @@ class MarketNewsDB:
             logger.error(f"Unexpected error during database operations: {e}")
             raise
 
+    def load_tables(self) -> tuple[pd.DataFrame, pd.DataFrame]:
+        try:
+            articles_df = pd.read_sql_query("SELECT * FROM articles", self.conn)
+            entities_df = pd.read_sql_query("SELECT * FROM entities", self.conn)
+
+            if articles_df.empty or entities_df.empty:
+                logger.warning("One or both tables returned empty DataFrames")
+
+            return articles_df, entities_df
+
+        except sqlite3.Error as e:
+            logger.error(f"Database error loading tables: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error loading tables: {e}")
+            raise
 
 def main(symbols: List[str], days: int = 1, save_data: bool = False):
     logger.info(f"Starting processing for symbols: {symbols} over {days} days")
