@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS entities (
 )
 '''
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Fetch MarketAux articles for given symbols over past days.")
     parser.add_argument(

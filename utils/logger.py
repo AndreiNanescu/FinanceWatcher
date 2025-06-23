@@ -4,6 +4,7 @@ from datetime import datetime
 
 LOG_FILE_PATH = None
 
+
 def setup_logger(name: str = __name__, level=logging.DEBUG):
     global LOG_FILE_PATH
 

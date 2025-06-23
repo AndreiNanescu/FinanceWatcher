@@ -9,6 +9,7 @@ from utils import NewsDocument, Article, setup_logger
 
 logger = setup_logger(__name__)
 
+
 class ChromaMarketNews:
     def __init__(self, db_path: str = "embeddings"):
         root_path = Path(__file__).resolve().parent.parent
@@ -30,7 +31,6 @@ class ChromaMarketNews:
         except Exception as e:
             logger.error(f"Failed to initialize ChromaMarketNews: {e}")
             raise
-
 
     def query(
             self,
@@ -56,7 +56,6 @@ class ChromaMarketNews:
 
         return formatted_results
 
-
     def get_news_by_entity(
             self,
             entity_name: Optional[str] = None,
@@ -78,7 +77,6 @@ class ChromaMarketNews:
             filters=filters if filters else None
         )
 
-
     def delete_article(self, article_id: str) -> None:
         results = self.collection.get(
             where={"article_id": {"$eq": article_id}}
@@ -86,7 +84,6 @@ class ChromaMarketNews:
 
         if results['ids']:
             self.collection.delete(ids=results['ids'])
-
 
     def index(self, articles: List[Article]) -> None:
         if not articles:
