@@ -138,7 +138,7 @@ class MarketAuxGatherer(DataGatherer):
             if not articles:
                 break
 
-            all_articles.extend(articles)
+            all_articles.append(data)
 
             if len(articles) < self.limit:
                 break
