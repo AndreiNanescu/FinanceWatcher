@@ -247,6 +247,52 @@ class MarketNewsDB:
             logger.error(f"Unexpected error during database operations: {exception}")
             raise
 
+    def add_article(self, article: Article) -> None:
+        if self.conn is None:
+            raise RuntimeError("Database connection is not established.")
+
+        try:
+            with self.conn:
+                self.conn.execute(
+                    '''
+                    INSERT OR IGNORE INTO articles
+                    (uuid, title, description, url, published_at, source)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ''',
+                    (
+                        article.uuid,
+                        article.title,
+                        article.description,
+                        article.url,
+                        article.published_at,
+                        article.source,
+                    )
+                )
+
+                if article.entities:
+                    entity_records = [
+                        (
+                            entity.article_uuid,
+                            entity.symbol,
+                            entity.name,
+                            entity.formatted_sentiment,
+                            entity.industry
+                        )
+                        for entity in article.entities
+                    ]
+                    self.conn.executemany(
+                        '''
+                        INSERT OR IGNORE INTO entities
+                        (article_uuid, symbol, name, sentiment, industry)
+                        VALUES (?, ?, ?, ?, ?)
+                        ''',
+                        entity_records
+                    )
+
+        except Exception as e:
+            logger.error(f"Error inserting article {article.uuid}: {e}")
+            raise
+
     def load_tables(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         try:
             articles_df = pd.read_sql_query("SELECT * FROM articles", self.conn)
