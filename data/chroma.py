@@ -18,6 +18,7 @@ class ChromaMarketNews:
         self.stats = {
             'articles_count': 0,
             'entities_count': 0,
+            'duplicated_entities': 0
         }
 
         try:
@@ -124,9 +125,27 @@ class ChromaMarketNews:
                     metas.append(doc.metadata)
                     ids.append(doc.id)
 
+        existing_docs = self.collection.get(ids=ids)
+        existing_ids = set(existing_docs['ids']) if existing_docs and 'ids' in existing_docs else set()
+
+        new_docs, new_metas, new_ids = [], [], []
+        for doc, meta, id_ in zip(docs, metas, ids):
+            if id_ not in existing_ids:
+                new_docs.append(doc)
+                new_metas.append(meta)
+                new_ids.append(id_)
+
+        duplicates_count = len(ids) - len(new_ids)
+
+        if not new_ids:
+            self.stats['entities_count'] = 0
+            self.stats['duplicated_entities'] = duplicates_count
+            return
+
         try:
-            self.collection.add(documents=docs, metadatas=metas, ids=ids)
-            self.stats['entities_count'] = len(ids)
+            self.collection.add(documents=new_docs, metadatas=new_metas, ids=new_ids)
+            self.stats['entities_count'] = len(new_ids)
+            self.stats['duplicated_entities'] = duplicates_count
         except Exception as e:
             logger.error(f"Error during indexing: {e}")
             raise
@@ -134,6 +153,7 @@ class ChromaMarketNews:
     def log_final_stats(self) -> None:
         logger.info(
             f"Index results: "
-            f"Articles: {self.stats['articles_count']}| Entities: {self.stats['entities_count']} | "
-            f"NOTE: Chroma isn't able to log the difference between duplicates and new "
+            f"Articles: {self.stats['articles_count']}| "
+            f"Entities: {self.stats['entities_count']} new, {self.stats['duplicated_entities']} duplicates "
         )
+
