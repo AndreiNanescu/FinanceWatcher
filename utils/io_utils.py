@@ -17,8 +17,28 @@ def save_dict_as_json(data: dict, filepath: Union[str, Path]):
 def normalize_name(name: str) -> str:
     if not name:
         return ""
-    name = name.lower()
-    name = re.sub(r"\b(inc|inc\.|ltd|ltd\.|corp|corp\.|llc|llc\.)\b", "", name)
+
+    name = name.lower().strip()
+
+    suffix_map = {
+        r"\binc\b": "",
+        r"\binc\.\b": "",
+        r"\bltd\b": "",
+        r"\bltd\.\b": "",
+        r"\bcorp\b": "corporation",
+        r"\bcorp\.\b": "corporation",
+        r"\bllc\b": "",
+        r"\bllc\.\b": "",
+        r"\bco\b": "company",
+        r"\bco\.\b": "company"
+    }
+    for pattern, replacement in suffix_map.items():
+        name = re.sub(pattern, replacement, name)
+
     name = re.sub(r"[^\w\s]", "", name)
-    name = re.sub(r"\s+", "_", name).strip()
+    name = re.sub(r"\s+", " ", name)
+    name = name.strip()
+    name = name.replace(" ", "_")
+    name = name.strip("_")
+
     return name

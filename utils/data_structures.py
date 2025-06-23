@@ -53,7 +53,7 @@ class NewsDocument:
         metadata = cls._build_metadata(article, entity)
 
         return cls(
-            id=f"{article.uuid}_{entity.symbol}",
+            id=f"{article.uuid}_{entity.normalized_name}",
             content=content,
             metadata=metadata
         )
