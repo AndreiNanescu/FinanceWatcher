@@ -50,11 +50,11 @@ class DataGatherer(ABC):
 
     @abstractmethod
     def _save_raw_json(self, data: dict, base_dir: str = "./raw") -> str:
-        pass
+        ...
 
     @abstractmethod
     def get_data(self) -> Optional[dict]:
-        pass
+        ...
 
 
 class MarketAuxGatherer(DataGatherer):

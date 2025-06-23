@@ -76,24 +76,24 @@ class MarketNewsDB:
         self.conn = None
         self._connect_to_db()
         self.create_tables()
-        self._init_stats_counters()
 
-    def _init_stats_counters(self):
-        self.articles_processed = 0
-        self.articles_inserted = 0
-        self.articles_duplicate = 0
-        self.entities_processed = 0
-        self.entities_inserted = 0
-        self.entities_duplicate = 0
-        self.parse_errors = 0
+        self.stats = {
+            'articles_processed': 0,
+            'articles_inserted': 0,
+            'articles_duplicate': 0,
+            'entities_processed': 0,
+            'entities_inserted': 0,
+            'entities_duplicate': 0,
+            'parse_errors': 0
+        }
 
     def _connect_to_db(self) -> None:
         try:
             self.conn = sqlite3.connect(self.db_name)
             self.conn.execute("PRAGMA journal_mode=WAL")
             logger.info(f"Connected to database {self.db_name}")
-        except Exception as e:
-            logger.error(f"Error connecting to {self.db_name} database: {e}")
+        except Exception as exception:
+            logger.error(f"Error connecting to {self.db_name} database: {exception}")
             raise
 
     def close(self) -> None:
@@ -104,9 +104,9 @@ class MarketNewsDB:
     def _log_final_stats(self) -> None:
         logger.info(
             f"Insert results: "
-            f"Articles: {self.articles_inserted} new, {self.articles_duplicate} duplicates | "
-            f"Entities: {self.entities_inserted} new, {self.entities_duplicate} duplicates | "
-            f"Parse errors: {self.parse_errors}"
+            f"Articles: {self.stats['articles_inserted']} new, {self.stats['articles_duplicate']} duplicates | "
+            f"Entities: {self.stats['entities_inserted']} new, {self.stats['entities_duplicate']} duplicates | "
+            f"Parse errors: {self.stats['parse_errors']}"
         )
 
     def create_tables(self) -> None:
@@ -119,8 +119,8 @@ class MarketNewsDB:
                 self.conn.execute(ARTICLES_TABLE)
                 self.conn.execute(ENTITIES_TABLE)
             logger.info("Tables created or confirmed existing.")
-        except Exception as e:
-            logger.error(f"Failed to create tables: {e}")
+        except Exception as exception:
+            logger.error(f"Failed to create tables: {exception}")
             raise
 
     @staticmethod
@@ -152,8 +152,8 @@ class MarketNewsDB:
                 entities=entities
             )
 
-        except (KeyError, ValueError) as e:
-            logger.error(f"Error parsing article: {e}")
+        except (KeyError, ValueError) as exception:
+            logger.error(f"Error parsing article: {exception}")
             raise
 
     @staticmethod
@@ -166,16 +166,14 @@ class MarketNewsDB:
                 raw_sentiment=float(entity_json.get("sentiment_score", 0.0)),
                 industry=entity_json.get("industry")
             )
-        except ValueError as e:
-            logger.error(f"Invalid sentiment score in entity: {e}")
+        except ValueError as exception:
+            logger.error(f"Invalid sentiment score in entity: {exception}")
             raise
 
     def add_articles(self, data: Union[Dict, List[Dict]]) -> None:
         if self.conn is None:
             logger.error("No DB connection to add articles.")
             return
-
-        self._init_stats_counters()
 
         batches = [data] if isinstance(data, dict) else data
         if not batches:
@@ -194,7 +192,7 @@ class MarketNewsDB:
                 continue
 
             for article_json in articles:
-                self.articles_processed += 1
+                self.stats['articles_processed'] += 1
                 try:
                     article = self._parse_article(article_json)
                     article_records.append((
@@ -207,7 +205,7 @@ class MarketNewsDB:
                     ))
 
                     for entity in article.entities:
-                        self.entities_processed += 1
+                        self.stats['entities_processed'] += 1
                         entity_records.append((
                             article.uuid,
                             entity.symbol,
@@ -216,9 +214,9 @@ class MarketNewsDB:
                             entity.industry,
                         ))
 
-                except Exception as e:
-                    self.parse_errors += 1
-                    logger.error(f"Skipping article due to error: {e}")
+                except Exception as exception:
+                    self.stats['parse_errors'] += 1
+                    logger.error(f"Skipping article due to error: {exception}")
                     continue
 
         try:
@@ -228,8 +226,8 @@ class MarketNewsDB:
                     (uuid, title, description, url, published_at, source)
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', article_records)
-                self.articles_inserted = cursor.rowcount
-                self.articles_duplicate = len(article_records) - cursor.rowcount
+                self.stats['articles_inserted'] = cursor.rowcount
+                self.stats['articles_duplicate'] = len(article_records) - cursor.rowcount
 
                 if entity_records:
                     cursor = self.conn.executemany('''
@@ -237,16 +235,16 @@ class MarketNewsDB:
                         (article_uuid, symbol, name, sentiment, industry)
                         VALUES (?, ?, ?, ?, ?)
                     ''', entity_records)
-                    self.entities_inserted = cursor.rowcount
-                    self.entities_duplicate = len(entity_records) - cursor.rowcount
+                    self.stats['entities_inserted'] = cursor.rowcount
+                    self.stats['entities_duplicate'] = len(entity_records) - cursor.rowcount
 
             self._log_final_stats()
 
-        except sqlite3.Error as e:
-            logger.error(f"Database error during insert: {e}")
+        except sqlite3.Error as exception:
+            logger.error(f"Database error during insert: {exception}")
             raise
-        except Exception as e:
-            logger.error(f"Unexpected error during database operations: {e}")
+        except Exception as exception:
+            logger.error(f"Unexpected error during database operations: {exception}")
             raise
 
     def load_tables(self) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -259,11 +257,11 @@ class MarketNewsDB:
 
             return articles_df, entities_df
 
-        except sqlite3.Error as e:
-            logger.error(f"Database error loading tables: {e}")
+        except sqlite3.Error as exception:
+            logger.error(f"Database error loading tables: {exception}")
             raise
-        except Exception as e:
-            logger.error(f"Unexpected error loading tables: {e}")
+        except Exception as exception:
+            logger.error(f"Unexpected error loading tables: {exception}")
             raise
 
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1):
@@ -281,8 +279,8 @@ def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: 
             db.close()
 
         logger.info("Processing completed successfully")
-    except Exception as e:
-        logger.error(f"Fatal error in main processing: {e}")
+    except Exception as exception:
+        logger.error(f"Fatal error in main processing: {exception}")
         raise
 
 
