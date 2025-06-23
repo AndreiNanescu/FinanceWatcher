@@ -30,7 +30,7 @@ FinanceWatcher is an AI-powered utility that analyzes financial news and social 
 | Layer        | Tools Used                          |
 |--------------|-------------------------------------|
 | Backend      | Flask, Python                       |
-| LLM / Embedding | Ollama (open-source models)        |
+| LLM / Embedding | Huggingface (open-source models)    |
 | Vector DB    | ChromaDB                            |
 | MCP Tools    | Anthropic Python SDK (MCP protocol) |
 | Data         | Financial news APIs / Twitter API   |
@@ -47,12 +47,12 @@ FinanceWatcher is an AI-powered utility that analyzes financial news and social 
 
 ## ✅ TODO
 
-- [ ] Set up news ingestion pipeline
-- [ ] Integrate Ollama embeddings
-- [ ] Implement sentiment scoring
+- [x] Set up news ingestion pipeline
+- [x] Integrate Huggingface embeddings
+- [x] Implement sentiment scoring
 - [ ] Calculate price-based impact scores
 - [ ] Create core MCP tools
-- [ ] Add basic RAG query flow
+- [x] Add basic RAG query flow
 - [ ] Build frontend dashboard (optional)
 
 ---
