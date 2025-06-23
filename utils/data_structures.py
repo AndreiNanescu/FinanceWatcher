@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 
 
@@ -20,6 +20,11 @@ class Entity:
     name: str
     raw_sentiment: float | str
     industry: Optional[str] = None
+    normalized_name: str = field(init=False)
+
+    def __post_init__(self):
+        from utils import normalize_name
+        self.normalized_name = normalize_name(self.name)
 
     @property
     def formatted_sentiment(self) -> str:

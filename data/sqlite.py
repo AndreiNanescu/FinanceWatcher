@@ -6,7 +6,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Union, List, Dict
 from utils import setup_logger, Entity, Article
-from gatherer import main as get_data
+from .gatherer import main as get_data
 
 logger = setup_logger(__name__)
 
@@ -27,13 +27,13 @@ CREATE TABLE IF NOT EXISTS entities (
     article_uuid TEXT,
     symbol TEXT,
     name TEXT,
+    normalized_name TEXT,
     sentiment TEXT,
     industry TEXT,
     FOREIGN KEY(article_uuid) REFERENCES articles(uuid) ON DELETE CASCADE,
-    UNIQUE(article_uuid, symbol) 
+    UNIQUE(article_uuid, normalized_name)
 )
 '''
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Fetch MarketAux articles for given symbols over past days.")
@@ -101,13 +101,26 @@ class MarketNewsDB:
             self.conn.close()
             logger.info("Database connection closed.")
 
-    def _log_final_stats(self) -> None:
+    def log_final_stats(self) -> None:
         logger.info(
             f"Insert results: "
             f"Articles: {self.stats['articles_inserted']} new, {self.stats['articles_duplicate']} duplicates | "
             f"Entities: {self.stats['entities_inserted']} new, {self.stats['entities_duplicate']} duplicates | "
             f"Parse errors: {self.stats['parse_errors']}"
         )
+
+    def load_tables(self):
+        if self.conn is None:
+            logger.error("No DB connection to load tables.")
+            return pd.DataFrame(), pd.DataFrame()
+
+        try:
+            articles_df = pd.read_sql_query("SELECT * FROM articles", self.conn)
+            entities_df = pd.read_sql_query("SELECT * FROM entities", self.conn)
+            return articles_df, entities_df
+        except Exception as e:
+            logger.error(f"Error loading tables from database: {e}")
+            return pd.DataFrame(), pd.DataFrame()
 
     def create_tables(self) -> None:
         if self.conn is None:
@@ -210,6 +223,7 @@ class MarketNewsDB:
                             article.uuid,
                             entity.symbol,
                             entity.name,
+                            entity.normalized_name,
                             entity.formatted_sentiment,
                             entity.industry,
                         ))
@@ -232,13 +246,13 @@ class MarketNewsDB:
                 if entity_records:
                     cursor = self.conn.executemany('''
                         INSERT OR IGNORE INTO entities 
-                        (article_uuid, symbol, name, sentiment, industry)
-                        VALUES (?, ?, ?, ?, ?)
+                        (article_uuid, symbol, name, normalized_name, sentiment, industry)
+                        VALUES (?, ?, ?, ?, ?, ?)
                     ''', entity_records)
                     self.stats['entities_inserted'] = cursor.rowcount
                     self.stats['entities_duplicate'] = len(entity_records) - cursor.rowcount
 
-            self._log_final_stats()
+            self.log_final_stats()
 
         except sqlite3.Error as exception:
             logger.error(f"Database error during insert: {exception}")
@@ -251,9 +265,10 @@ class MarketNewsDB:
         if self.conn is None:
             raise RuntimeError("Database connection is not established.")
 
+        self.stats['articles_processed'] += 1
         try:
             with self.conn:
-                self.conn.execute(
+                cursor = self.conn.execute(
                     '''
                     INSERT OR IGNORE INTO articles
                     (uuid, title, description, url, published_at, source)
@@ -268,6 +283,9 @@ class MarketNewsDB:
                         article.source,
                     )
                 )
+                inserted = cursor.rowcount
+                self.stats['articles_inserted'] += inserted
+                self.stats['articles_duplicate'] += (1 - inserted)
 
                 if article.entities:
                     entity_records = [
@@ -275,40 +293,31 @@ class MarketNewsDB:
                             entity.article_uuid,
                             entity.symbol,
                             entity.name,
+                            entity.normalized_name,
                             entity.formatted_sentiment,
                             entity.industry
                         )
                         for entity in article.entities
                     ]
-                    self.conn.executemany(
+                    cursor = self.conn.executemany(
                         '''
                         INSERT OR IGNORE INTO entities
-                        (article_uuid, symbol, name, sentiment, industry)
-                        VALUES (?, ?, ?, ?, ?)
+                        (article_uuid, symbol, name, normalized_name, sentiment, industry)
+                        VALUES (?, ?, ?, ?, ?, ?)
                         ''',
                         entity_records
                     )
+                    inserted_entities = cursor.rowcount
+                    self.stats['entities_processed'] += len(entity_records)
+                    self.stats['entities_inserted'] += inserted_entities
+                    self.stats['entities_duplicate'] += len(entity_records) - inserted_entities
 
-        except Exception as e:
-            logger.error(f"Error inserting article {article.uuid}: {e}")
+
+        except Exception as error:
+            self.stats['parse_errors'] += 1
+            logger.error(f"Error inserting article {article.uuid}: {error}")
             raise
 
-    def load_tables(self) -> tuple[pd.DataFrame, pd.DataFrame]:
-        try:
-            articles_df = pd.read_sql_query("SELECT * FROM articles", self.conn)
-            entities_df = pd.read_sql_query("SELECT * FROM entities", self.conn)
-
-            if articles_df.empty or entities_df.empty:
-                logger.warning("One or both tables returned empty DataFrames")
-
-            return articles_df, entities_df
-
-        except sqlite3.Error as exception:
-            logger.error(f"Database error loading tables: {exception}")
-            raise
-        except Exception as exception:
-            logger.error(f"Unexpected error loading tables: {exception}")
-            raise
 
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1):
     logger.info(f"Starting processing for symbols: {symbols} over {days} days, with {max_pages} pages per day.")
