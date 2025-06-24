@@ -1,5 +1,5 @@
 .env
 .venv/
-data/raw
-db/
+backend/rag/raw
+backend/db/
 logs/

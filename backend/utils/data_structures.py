@@ -23,7 +23,7 @@ class Entity:
     normalized_name: str = field(init=False)
 
     def __post_init__(self):
-        from utils import normalize_name
+        from backend.utils import normalize_name
         self.normalized_name = normalize_name(self.name)
 
     @property

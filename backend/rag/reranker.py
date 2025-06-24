@@ -3,21 +3,30 @@ import torch
 from typing import List, Tuple
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-from utils import setup_logger
+from backend.utils import setup_logger
 
 logger = setup_logger(__name__)
 
 class BGEReranker:
     def __init__(self, model_name: str = "BAAI/bge-reranker-base", device: str = None):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        self.model_name = model_name
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(self.device)
-        self.model.eval()
+        self.tokenizer = None
+        self.model = None
+        logger.info("BGEReranker initialized but model/tokenizer not loaded yet.")
 
-        logger.info('Initialized reranker')
+    def _load_model(self):
+        if self.tokenizer is None or self.model is None:
+            logger.info(f"Loading model '{self.model_name}' on {self.device}...")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
+            self.model.to(self.device)
+            self.model.eval()
+            logger.info("Model loaded and ready.")
 
     def rerank(self, query: str, passages: List[str], top_k: int = 5) -> List[Tuple[str, float]]:
+        self._load_model()
+
         pairs = [(query, passage) for passage in passages]
         inputs = self.tokenizer(pairs, padding=True, truncation=True, return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}

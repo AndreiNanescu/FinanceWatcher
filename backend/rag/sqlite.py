@@ -5,7 +5,7 @@ import pandas as pd
 
 from pathlib import Path
 from typing import Union, List, Dict
-from utils import setup_logger, Entity, Article
+from backend.utils import setup_logger, Entity, Article
 from .gatherer import main as get_data
 
 logger = setup_logger(__name__)
