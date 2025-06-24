@@ -1,4 +1,3 @@
-import logging
 import chromadb
 
 from pathlib import Path
@@ -90,6 +89,7 @@ class ChromaMarketNews:
         if not articles:
             logger.warning("No articles to index.")
             return
+
         self.stats['articles_count'] = len(articles)
 
         docs, metas, ids = [], [], []
@@ -125,8 +125,24 @@ class ChromaMarketNews:
                     metas.append(doc.metadata)
                     ids.append(doc.id)
 
+        seen = set()
+        deduped = []
+        for doc, meta, id_ in zip(docs, metas, ids):
+            if id_ not in seen:
+                seen.add(id_)
+                deduped.append((doc, meta, id_))
+
+        if not deduped:
+            logger.warning("All documents were duplicates by ID before querying Chroma.")
+            self.stats['entities_count'] = 0
+            self.stats['duplicated_entities'] = len(ids)
+            return
+
+        docs, metas, ids = zip(*deduped)
+        ids = list(ids)
+
         existing_docs = self.collection.get(ids=ids)
-        existing_ids = set(existing_docs['ids']) if existing_docs and 'ids' in existing_docs else set()
+        existing_ids = set(existing_docs.get('ids', []))
 
         new_docs, new_metas, new_ids = [], [], []
         for doc, meta, id_ in zip(docs, metas, ids):
@@ -135,9 +151,10 @@ class ChromaMarketNews:
                 new_metas.append(meta)
                 new_ids.append(id_)
 
-        duplicates_count = len(ids) - len(new_ids)
+        duplicates_count = len(docs) - len(new_ids)
 
         if not new_ids:
+            logger.info("No new documents to add — all were already indexed.")
             self.stats['entities_count'] = 0
             self.stats['duplicated_entities'] = duplicates_count
             return
