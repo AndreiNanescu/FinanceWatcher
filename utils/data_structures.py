@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TypedDict
 
 
 @dataclass
@@ -89,3 +89,8 @@ class NewsDocument:
             "industry": entity.industry,
             "entity_type": "specific"
         }
+
+class Candidate(TypedDict):
+    document: str
+    metadata: Dict
+    score: float
