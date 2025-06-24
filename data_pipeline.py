@@ -10,6 +10,7 @@ from utils import Article, Entity, setup_logger, normalize_name
 logger = setup_logger(__name__)
 load_dotenv()
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Fetch MarketAux articles for given symbols over past days.")
     parser.add_argument(
@@ -37,8 +38,10 @@ def parse_args():
     )
     return parser.parse_args()
 
+
 class DataPipeline:
-    def __init__(self, gatherer: MarketAuxGatherer, db: MarketNewsDB, indexer: ChromaMarketNews, days: int = 1, max_pages: int = 1):
+    def __init__(self, gatherer: MarketAuxGatherer, db: MarketNewsDB, indexer: ChromaMarketNews, days: int = 1,
+                 max_pages: int = 1):
         self.gatherer = gatherer
         self.db = db
         self.indexer = indexer
@@ -50,7 +53,7 @@ class DataPipeline:
         if self.days == 1:
             return self.gatherer.get_data(max_pages=self.max_pages)
         else:
-            return self.gatherer.get_historical_data(days=self.days,max_pages_per_day=self.max_pages)
+            return self.gatherer.get_historical_data(days=self.days, max_pages_per_day=self.max_pages)
 
     @staticmethod
     def _parse_article(art_json: Dict) -> Article:
@@ -115,6 +118,7 @@ class DataPipeline:
         if to_index:
             self._index_articles(to_index)
 
+
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1):
     logger.info(f"Starting processing for symbols: {symbols} over {days} days, with {max_pages} pages per day.")
     try:
@@ -130,6 +134,7 @@ def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: 
         db.close()
     except Exception as e:
         logger.error(f"Pipeline failed: {e}")
+
 
 if __name__ == "__main__":
     args = parse_args()

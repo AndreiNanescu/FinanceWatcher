@@ -58,7 +58,8 @@ class DataGatherer(ABC):
 
 
 class MarketAuxGatherer(DataGatherer):
-    def __init__(self, symbols: List[str], save_data: bool = False, language: str = "en", filter_entities: bool = True, limit: int = 3):
+    def __init__(self, symbols: List[str], save_data: bool = False, language: str = "en", filter_entities: bool = True,
+                 limit: int = 3):
         super().__init__(symbols, save_data)
         self.language = language
         self.filter_entities = filter_entities
@@ -167,13 +168,16 @@ class MarketAuxGatherer(DataGatherer):
 
         return all_data
 
-def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1) -> Optional[Union[List[Dict], Dict]]:
+
+def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1) -> Optional[
+    Union[List[Dict], Dict]]:
     gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
 
     if days == 1:
         return gatherer.get_data(max_pages=max_pages)
     else:
         return gatherer.get_historical_data(days=days, max_pages_per_day=max_pages)
+
 
 if __name__ == "__main__":
     args = parse_args()
