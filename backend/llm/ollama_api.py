@@ -5,7 +5,8 @@ from datetime import datetime
 from textwrap import dedent
 from typing import List, Dict
 
-from data import ChromaMarketNews
+from ..rag import ChromaMarketNews
+
 
 
 class Llama3:
@@ -76,6 +77,7 @@ class Llama3:
             - Avoid mentioning specific dates unless critical to understanding.
             - Use natural, professional, and assertive language.
             - Conclude with a focused summary that highlights key risks and potential outcomes or next steps.
+            - If the question is unrelated to finance or markets, answer normally without mentioning finance or the news.
         """)
 
         return [

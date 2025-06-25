@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Union
-from utils import setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV
+from backend.utils import setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV
 from pathlib import Path
 
 logger = setup_logger(__name__)

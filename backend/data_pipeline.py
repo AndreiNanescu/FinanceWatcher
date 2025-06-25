@@ -2,10 +2,10 @@ import argparse
 
 from dotenv import load_dotenv
 from tqdm import tqdm
-from typing import List, Dict
+from typing import List, Dict, Optional
 
-from data import MarketNewsDB, ChromaMarketNews, MarketAuxGatherer
-from utils import Article, Entity, setup_logger, normalize_name
+from backend.rag import MarketNewsDB, ChromaMarketNews, MarketAuxGatherer
+from .utils import Article, Entity, setup_logger, normalize_name
 
 logger = setup_logger(__name__)
 load_dotenv()
@@ -119,12 +119,14 @@ class DataPipeline:
             self._index_articles(to_index)
 
 
-def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1):
+def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1,
+         gatherer_obj: Optional[MarketAuxGatherer] = None, db_obj: Optional[MarketNewsDB] = None,
+         chroma_obj: Optional[ChromaMarketNews] = None):
     logger.info(f"Starting processing for symbols: {symbols} over {days} days, with {max_pages} pages per day.")
     try:
-        gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
-        db = MarketNewsDB()
-        chroma_indexer = ChromaMarketNews()
+        gatherer = gatherer_obj if gatherer_obj is not None else MarketAuxGatherer(symbols=symbols, save_data=save_data)
+        db = db_obj if db_obj is not None else MarketNewsDB()
+        chroma_indexer = chroma_obj if chroma_obj is not None else ChromaMarketNews()
 
         pipeline = DataPipeline(gatherer=gatherer, db=db, indexer=chroma_indexer, days=days, max_pages=max_pages)
         pipeline.process()
