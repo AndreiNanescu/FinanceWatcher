@@ -1,8 +1,9 @@
+const defaultTheme = require('tailwindcss/defaultTheme');
+const scrollbar = require('tailwind-scrollbar');
+
 module.exports = {
   darkMode: 'class',
-  content: [
-    "./src/**/*.{js,jsx,ts,tsx}",
-  ],
+  content: ["./src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
       colors: {
@@ -16,8 +17,13 @@ module.exports = {
         'modern-dark-text-secondary': '#71757a',
         'modern-dark-user-message': '#19c37d',
         'modern-dark-header-input': '#2a2b32',
-      }
-    }
+      },
+      fontFamily: {
+        sans: ['Inter', ...defaultTheme.fontFamily.sans],
+      },
+    },
   },
-  plugins: [],
+  plugins: [
+    scrollbar,
+  ],
 }

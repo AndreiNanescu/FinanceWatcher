@@ -77,7 +77,7 @@ class Llama3:
             - Avoid mentioning specific dates unless critical to understanding.
             - Use natural, professional, and assertive language.
             - Conclude with a focused summary that highlights key risks and potential outcomes or next steps.
-            - If the question is unrelated to finance or markets, politely state that you are specialized in financial analysis and cannot provide an answer.
+            - If the question is unrelated to finance or markets, answer normally without mentioning finance or the news.
         """)
 
         return [
