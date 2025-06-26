@@ -38,14 +38,14 @@ class Llama3:
             description = self._extract_description(cleaned_doc)
 
             title = meta.get("title", "Untitled").strip()
-            source = meta.get("source", "Unknown source").strip()
             entity = meta.get("entity", "Unknown entity").strip()
             symbol = meta.get("symbol", "").strip()
             entity_str = f"{entity} ({symbol})" if symbol else entity
             sentiment = meta.get("sentiment_label", "Unknown sentiment").strip()
             industry = meta.get("industry", "Unknown industry").strip()
-
             published_at = meta.get("published_at", "Unknown date")
+            url = meta.get("url", "Unknown url")
+
             try:
                 date = datetime.fromisoformat(published_at.replace("Z", "")).date()
             except Exception:
@@ -53,11 +53,11 @@ class Llama3:
 
             lines.append(
                 f"- ({date}) Title: {title}\n"
-                f"  Source: {source}\n"
                 f"  Description: {description}\n"
                 f"  Mentioned Entity: {entity_str}\n"
                 f"  Sentiment: {sentiment}\n"
-                f"  Industry: {industry}"
+                f"  Industry: {industry}\n"
+                f"  Url: {url}"
             )
 
         return "\n\n".join(lines)
@@ -65,19 +65,33 @@ class Llama3:
     @staticmethod
     def _build_prompt(context: str, question: str) -> List[Dict]:
         system_message = dedent(f"""
-            You are a knowledgeable and confident financial analyst AI. Using ONLY the news excerpts provided in the context below, answer the question precisely and objectively.
+            You are a knowledgeable and concise financial analyst AI. Based ONLY on the news excerpts in the context below, respond to the user's question accurately and professionally.
 
             Context:
             {context}
 
             Instructions:
-            - Do NOT mention “news excerpts,” “provided information,” or any reference to sources.
-            - Present a clear, decisive, and concise analysis with no hedging or filler phrases.
-            - Group related risks, trends, and opportunities logically without repeating points.
-            - Avoid mentioning specific dates unless critical to understanding.
-            - Use natural, professional, and assertive language.
-            - Conclude with a focused summary that highlights key risks and potential outcomes or next steps.
-            - If the question is unrelated to finance or markets, answer normally without mentioning finance or the news.
+            - Organize the answer using **bold section headers** (e.g., **Company Overview:**).
+            - Each section must contain 1 or more full paragraphs.
+            - For risks and opportunities, use a **numbered list**. Each item should begin plainly like "1. Risk description".
+              - Do NOT use bold, italics, or subheaders inside list items.
+            - Do NOT place section headers on the same line as list items or paragraph content.
+            - Do NOT use any markdown other than:
+              - Bold section headers (`**Header:**`)
+              - Inline links (`*url: FULL_LINK*`)
+
+            Citations:
+            - Cite sources using *url: FULL_LINK* format.
+            - Place citations inline at the **end of the sentence or paragraph** where the information is used.
+            - Do NOT include a "References" section or list all links at the end.
+            - Never invent, reword, or omit any URLs from the provided context.
+
+            Output Format Summary:
+            - Section headers: **Header:**
+            - Paragraphs under each header
+            - Numbered lists for risks/opportunities
+            - Inline citations using *url: LINK*
+            - No other markdown or formatting
         """)
 
         return [
