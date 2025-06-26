@@ -6,7 +6,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Union, List, Dict
 from backend.utils import setup_logger, Entity, Article
-from .gatherer import main as get_data
+from .gatherers import MarketAuxGatherer
 
 logger = setup_logger(__name__)
 
@@ -323,7 +323,8 @@ class MarketNewsDB:
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1):
     logger.info(f"Starting processing for symbols: {symbols} over {days} days, with {max_pages} pages per day.")
     try:
-        data = get_data(symbols=symbols, days=days, save_data=save_data, max_pages=max_pages)
+        gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
+        data = gatherer.get_data(days=days, max_pages=max_pages)
         if not data:
             logger.warning("No data received from gatherer")
             return

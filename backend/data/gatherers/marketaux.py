@@ -2,11 +2,13 @@ import argparse
 import os
 import requests
 
-from abc import ABC, abstractmethod
+from .base import DataGatherer
+
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Union
-from backend.utils import setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV
+from backend.utils import (setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV,
+                           Entity, Article, format_sentiment)
 from pathlib import Path
 
 logger = setup_logger(__name__)
@@ -39,23 +41,6 @@ def parse_args():
         help="Number of pages to fetch for each day."
     )
     return parser.parse_args()
-
-
-class DataGatherer(ABC):
-    def __init__(self, symbols: List[str], save_data: bool = False):
-        if not symbols or not all(isinstance(s, str) for s in symbols):
-            raise ValueError("Symbols must be a non-empty list of strings.")
-        self.symbols = symbols
-        self.save_data = save_data
-
-    @abstractmethod
-    def _save_raw_json(self, data: dict, base_dir: str = "./raw") -> str:
-        ...
-
-    @abstractmethod
-    def get_data(self) -> Optional[dict]:
-        ...
-
 
 class MarketAuxGatherer(DataGatherer):
     def __init__(self, symbols: List[str], save_data: bool = False, language: str = "en", filter_entities: bool = True,
@@ -92,7 +77,8 @@ class MarketAuxGatherer(DataGatherer):
             "symbols": ",".join(self.symbols),
             "language": self.language,
             "filter_entities": self.filter_entities,
-            "limit": self.limit
+            "limit": self.limit,
+            "page": page,
         }
 
         if published_on:
@@ -128,55 +114,106 @@ class MarketAuxGatherer(DataGatherer):
             logger.error(f"Unexpected request error: {e}")
             raise StopFetching("Request error occurred, stopping fetching.")
 
-    def get_data(self, max_pages: int = 1) -> Optional[Dict]:
-        all_articles = []
-        for page in range(1, max_pages + 1):
-            data = self._request_data(page=page)
-            if not data:
-                break
+    def clean_data(self, data: Union[List[Dict], Dict]) -> List[Article]:
+        if isinstance(data, dict):
+            data = [data]
 
-            articles = data.get("data", [])
-            if not articles:
-                break
+        cleaned_articles = []
 
-            all_articles.append(data)
+        for response in data:
+            for article in response.get("data", []):
+                entities = []
+                for ent in article.get("entities", []):
+                    entity = Entity(
+                        symbol=ent.get("symbol", "no symbol"),
+                        name=ent.get("name", "no name"),
+                        sentiment=format_sentiment(ent.get("sentiment_score", 0.0)),
+                        industry=ent.get("industry")
+                    )
+                    entities.append(entity)
 
-            if len(articles) < self.limit:
-                break
+                cleaned_article = Article(
+                    uuid=article.get("uuid", "no uuid"),
+                    title=article.get("title", "no title"),
+                    description=article.get("description", "no description"),
+                    url=article.get("url", "no url"),
+                    published_at=article.get("published_at", "no date"),
+                    source=article.get("source", "no source"),
+                    entities=self._deduplicate_entities(article.get("entities", []))
+                )
+                cleaned_articles.append(cleaned_article)
 
-        return all_articles if all_articles else None
+        return cleaned_articles
 
-    def get_historical_data(self, days: int, max_pages_per_day: int = 1) -> List[Dict]:
+    @staticmethod
+    def _deduplicate_entities(raw_entities: List[Dict]) -> List[Entity]:
+        entity_map = {}
+
+        for ent in raw_entities:
+            name = ent.get("name", "").strip()
+            symbol = ent.get("symbol", "")
+
+            if not name:
+                continue
+
+            existing = entity_map.get(name)
+
+            is_better = (
+                    existing is None or
+                    (symbol.isupper() and '.' not in symbol) or
+                    ('.US' in symbol and '.US' not in existing.symbol)
+            )
+
+            if is_better:
+                entity_map[name] = Entity(
+                    symbol=symbol,
+                    name=name,
+                    sentiment=format_sentiment(ent.get("sentiment_score", 0.0)),
+                    industry=ent.get("industry")
+                )
+
+        return list(entity_map.values())
+
+    def get_data(self, days: int = 1, max_pages: int = 1) -> Optional[Union[List[Dict], Dict]]:
         all_data = []
+
         for day_delta in range(days):
-            date_str = (datetime.utcnow() - timedelta(days=day_delta)).strftime("%Y-%m-%d")
-            for page in range(1, max_pages_per_day + 1):
+            date_str = (datetime.utcnow() - timedelta(days=day_delta)).strftime("%Y-%m-%d") if days > 1 else None
+
+            for page in range(1, max_pages + 1):
                 try:
-                    data = self._request_data(published_on=date_str, page=page)
+                    data = self._request_data(published_on=date_str, page=page) if date_str else self._request_data(
+                        page=page)
                 except StopFetching as e:
-                    logger.info(f"Stopped fetching historical data early due to API error: {e}")
+                    logger.info(f"Stopped fetching data early due to API error: {e}")
                     break
                 if not data:
                     break
+
                 articles = data.get("data", [])
                 if not articles:
                     break
+
                 all_data.append(data)
 
                 if len(articles) < self.limit:
                     break
 
+            if days == 1:
+                break
+
+        if days == 1:
+            return all_data if all_data else None
         return all_data
 
 
-def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1) -> Optional[
-    Union[List[Dict], Dict]]:
+def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1) -> Optional[Union[List[Dict], Dict]]:
     gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
 
-    if days == 1:
-        return gatherer.get_data(max_pages=max_pages)
-    else:
-        return gatherer.get_historical_data(days=days, max_pages_per_day=max_pages)
+    #data = gatherer.get_data(days=days, max_pages=max_pages)
+    clean_data = gatherer.clean_data(data)
+
+    return data
 
 
 if __name__ == "__main__":

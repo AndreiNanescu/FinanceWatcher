@@ -15,27 +15,18 @@ class Article:
 
 @dataclass
 class Entity:
-    article_uuid: str
     symbol: str
     name: str
-    raw_sentiment: float | str
+    sentiment: str
     industry: Optional[str] = None
-    normalized_name: str = field(init=False)
 
-    def __post_init__(self):
-        from backend.utils import normalize_name
-        self.normalized_name = normalize_name(self.name)
-
-    @property
-    def formatted_sentiment(self) -> str:
-        if isinstance(self.raw_sentiment, str):
-            return self.raw_sentiment
-
-        if self.raw_sentiment > 0.2:
-            return f"Positive ({self.raw_sentiment:.2f})"
-        elif self.raw_sentiment < -0.2:
-            return f"Negative ({self.raw_sentiment:.2f})"
-        return f"Neutral ({self.raw_sentiment:.2f})"
+def format_sentiment(score: float) -> str:
+    if score > 0.2:
+        return f"Positive ({score:.2f})"
+    elif score < -0.2:
+        return f"Negative ({score:.2f})"
+    else:
+        return f"Neutral ({score:.2f})"
 
 
 @dataclass
