@@ -6,9 +6,25 @@ from .base import DataGatherer
 
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+
+import nltk
+
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+
+try:
+    nltk.data.find('tokenizers/punkt_tab')
+except LookupError:
+    nltk.download('punkt_tab')
+from newspaper import Article as NewsPaperArticle
+
 from typing import Dict, List, Optional, Union
 from backend.utils import (setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV,
-                           Entity, Article, format_sentiment)
+                           Entity, format_sentiment)
+from backend.utils import Article as MyArticle
+
 from pathlib import Path
 
 logger = setup_logger(__name__)
@@ -114,7 +130,7 @@ class MarketAuxGatherer(DataGatherer):
             logger.error(f"Unexpected request error: {e}")
             raise StopFetching("Request error occurred, stopping fetching.")
 
-    def clean_data(self, data: Union[List[Dict], Dict]) -> List[Article]:
+    def _clean_data(self, data: Union[List[Dict], Dict]) -> List[MyArticle]:
         if isinstance(data, dict):
             data = [data]
 
@@ -132,7 +148,7 @@ class MarketAuxGatherer(DataGatherer):
                     )
                     entities.append(entity)
 
-                cleaned_article = Article(
+                cleaned_article = MyArticle(
                     uuid=article.get("uuid", "no uuid"),
                     title=article.get("title", "no title"),
                     description=article.get("description", "no description"),
@@ -174,7 +190,7 @@ class MarketAuxGatherer(DataGatherer):
 
         return list(entity_map.values())
 
-    def get_data(self, days: int = 1, max_pages: int = 1) -> Optional[Union[List[Dict], Dict]]:
+    def get_data(self, days: int = 1, max_pages: int = 1) -> Optional[List[MyArticle]]:
         all_data = []
 
         for day_delta in range(days):
@@ -202,16 +218,52 @@ class MarketAuxGatherer(DataGatherer):
             if days == 1:
                 break
 
-        if days == 1:
-            return all_data if all_data else None
-        return all_data
+        if not all_data:
+            return None
 
+        cleaned_data = self._clean_data(all_data)
+        expanded_data = self._expand_description(cleaned_data)
+
+        return expanded_data
+
+    @staticmethod
+    def _scrape_article(url: str) -> dict:
+        try:
+            article = NewsPaperArticle(url)
+            article.download()
+            article.parse()
+            article.nlp()
+
+            return {
+                "title": article.title,
+                "text": article.text,
+                "authors": article.authors,
+                "publish_date": article.publish_date,
+                "keywords": article.keywords,
+                "summary": article.summary,
+            }
+        except Exception as e:
+            print(f"Failed to scrape {url}: {e}")
+            return {}
+
+    def _expand_description(self, news_articles: Union[MyArticle, List[MyArticle]]):
+        if isinstance(news_articles, MyArticle):
+            news_articles = [news_articles]
+
+        for news_article in news_articles:
+            scraped_data = self._scrape_article(news_article.url)
+
+            summary = scraped_data.get('summary', '')
+            keywords = ", ".join(scraped_data.get('keywords', []))
+
+            news_article.description = f"{summary}\nKeywords: {keywords}"
+
+        return news_articles
 
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1) -> Optional[Union[List[Dict], Dict]]:
     gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
 
-    #data = gatherer.get_data(days=days, max_pages=max_pages)
-    clean_data = gatherer.clean_data(data)
+    data = gatherer.get_data(days=days, max_pages=max_pages)
 
     return data
 
