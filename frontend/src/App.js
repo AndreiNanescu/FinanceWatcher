@@ -1,23 +1,194 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
-function TypingIndicator() {
+
+function Formatter({ text }) {
+  const getWebsiteName = (url) => {
+    try {
+      const { hostname } = new URL(url);
+      return hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  };
+
+  const sectionRegex = /\*\*(.+?)\*\*:?\s*([\s\S]*?)(?=(\*\*.+?\*\*:?)|$)/g;
+  const sections = [];
+  let match;
+
+  while ((match = sectionRegex.exec(text)) !== null) {
+    const [, header, body] = match;
+
+    let displayHeader = header;
+    let isNumberedHeader = false;
+    const numberHeaderMatch = header.match(/^(\d+)\.\s*(.+)/);
+    if (numberHeaderMatch) {
+      isNumberedHeader = true;
+      displayHeader = numberHeaderMatch[2];
+    }
+
+    const paragraphs = body
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+
+    sections.push({ header: displayHeader, paragraphs, isNumberedHeader });
+  }
+
+  const referenceRegex = /^\*?(\d+)\*?:\s*\*?(?:url:?\s*)?(https?:\/\/[^\s*]+)\*?/gim;
+  const references = [];
+  let refMatch;
+  while ((refMatch = referenceRegex.exec(text)) !== null) {
+    references.push({ number: refMatch[1], url: refMatch[2] });
+  }
+
+  const replaceUrlsWithLinks = (text) => {
+    const urlRegex = /\*?(?:Source:\s*)?(?:url:?\s*)?(https?:\/\/[^\s*]+)\*?/gi;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+    let keyIndex = 0;
+
+    while ((match = urlRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+      const websiteName = getWebsiteName(match[1]);
+      parts.push(
+        <a
+          key={"link-" + keyIndex}
+          href={match[1]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-modern-dark-accent underline"
+        >
+          {websiteName}
+        </a>
+      );
+      lastIndex = match.index + match[0].length;
+      keyIndex++;
+    }
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+    return parts;
+  };
+
+  const parseNumberedList = (paragraph) => {
+    const listItemRegex = /^(\d+)\.\s+(.+)/gm;
+    const items = [];
+    let match;
+
+    while ((match = listItemRegex.exec(paragraph)) !== null) {
+      const [, number, content] = match;
+      const colonMatch = content.match(/^(.+?):\s*(.+)$/);
+      if (colonMatch) {
+        const title = colonMatch[1];
+        const description = colonMatch[2];
+        items.push(
+          <li key={number}>
+            <strong>{title}:</strong> {replaceUrlsWithLinks(description)}
+          </li>
+        );
+      } else {
+        items.push(
+          <li key={number}>{replaceUrlsWithLinks(content)}</li>
+        );
+      }
+    }
+
+    if (items.length === 0) return null;
+
+    return (
+      <ol className="list-decimal list-inside space-y-1 my-2">
+        {items}
+      </ol>
+    );
+  };
+
   return (
-    <div className="flex items-center h-5 p-3 rounded-xl bg-modern-dark-tertiary max-w-[85%] self-start">
-      <div className="w-2 h-2 bg-modern-dark-text-secondary rounded-full mx-0.5 animate-bounce" style={{ animationDelay: "0s" }}></div>
-      <div className="w-2 h-2 bg-modern-dark-text-secondary rounded-full mx-0.5 animate-bounce" style={{ animationDelay: "0.2s" }}></div>
-      <div className="w-2 h-2 bg-modern-dark-text-secondary rounded-full mx-0.5 animate-bounce" style={{ animationDelay: "0.4s" }}></div>
+    <div className="text-modern-dark-text-primary text-base leading-relaxed space-y-4">
+      {sections.map(({ header, paragraphs, isNumberedHeader }, idx) => (
+        <div key={idx} className="space-y-2">
+          {!isNumberedHeader && (
+            <h2 className="text-lg font-semibold text-modern-dark-text-primary mt-4">
+              {header}
+            </h2>
+          )}
+          {paragraphs.map((para, i) => {
+            const numberedList = parseNumberedList(para);
+            if (numberedList) {
+              return <div key={i}>{numberedList}</div>;
+            }
+            return (
+              <p key={i} className="whitespace-pre-wrap">
+                {isNumberedHeader ? (
+                  <strong>{header}:</strong>
+                ) : null}{" "}
+                {replaceUrlsWithLinks(para)}
+              </p>
+            );
+          })}
+        </div>
+      ))}
+
+      {references.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-lg font-semibold text-modern-dark-text-primary mt-4">
+            References
+          </h2>
+          <ol className="list-decimal list-inside space-y-1 mt-2">
+            {references.map(({ number, url }) => (
+              <li key={number}>
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-modern-dark-accent underline"
+                >
+                  {getWebsiteName(url)}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
     </div>
   );
 }
 
-function TypingMessage({ text, onComplete, chatContainerRef, cancelTypingRef, isCanceled }) {
+function TypingIndicator() {
+  return (
+    <div className="flex items-center h-5 p-3 rounded-xl bg-modern-dark-tertiary max-w-[85%] self-start">
+      <div
+        className="w-2 h-2 bg-modern-dark-text-secondary rounded-full mx-0.5 animate-bounce"
+        style={{ animationDelay: "0s" }}
+      ></div>
+      <div
+        className="w-2 h-2 bg-modern-dark-text-secondary rounded-full mx-0.5 animate-bounce"
+        style={{ animationDelay: "0.2s" }}
+      ></div>
+      <div
+        className="w-2 h-2 bg-modern-dark-text-secondary rounded-full mx-0.5 animate-bounce"
+        style={{ animationDelay: "0.4s" }}
+      ></div>
+    </div>
+  );
+}
+
+function TypingMessage({
+  text,
+  onComplete,
+  chatContainerRef,
+  cancelTypingRef,
+  isCanceled,
+}) {
   const [displayedText, setDisplayedText] = useState("");
   const typingInterval = useRef(null);
 
   useEffect(() => {
     if (!text || isCanceled) {
-      setDisplayedText((prev) => prev); // preserve typed text if cancel
+      setDisplayedText((prev) => prev);
       return;
     }
 
@@ -31,7 +202,8 @@ function TypingMessage({ text, onComplete, chatContainerRef, cancelTypingRef, is
           currentIndex++;
 
           if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+            chatContainerRef.current.scrollTop =
+              chatContainerRef.current.scrollHeight;
           }
 
           return next;
@@ -54,7 +226,7 @@ function TypingMessage({ text, onComplete, chatContainerRef, cancelTypingRef, is
 
   return (
     <div className="max-w-[85%] self-start text-modern-dark-text-primary whitespace-pre-wrap">
-      {displayedText}
+      <Formatter text={displayedText} />
     </div>
   );
 }
@@ -99,7 +271,7 @@ function App() {
       setIsWaiting(false);
       setIsTyping(true);
       setTypingMessage(botResponse);
-      setIsCanceled(false); // reset
+      setIsCanceled(false);
     } catch (error) {
       setIsWaiting(false);
       setMessages((prev) => [
@@ -173,10 +345,13 @@ function App() {
 
   return (
     <div className="dark flex flex-col h-screen bg-modern-dark-primary text-modern-dark-text-primary font-sans">
-      {/* Header */}
       <header className="h-16 flex justify-between items-center p-4 bg-modern-dark-header-input border-b border-modern-dark-border flex-shrink-0">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Logo" className="w-[60px] h-[60px] object-contain mr-3" />
+          <img
+            src="/logo.png"
+            alt="Logo"
+            className="w-[60px] h-[60px] object-contain mr-3"
+          />
           <span className="text-2xl font-medium">Finance Watcher</span>
         </div>
         <div className="flex gap-2">
@@ -194,8 +369,19 @@ function App() {
           >
             {isUpdating ? (
               <>
-                <svg className="w-4 h-4 animate-spin text-modern-dark-text-secondary" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <svg
+                  className="w-4 h-4 animate-spin text-modern-dark-text-secondary"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
                   <path
                     className="opacity-75"
                     fill="currentColor"
@@ -211,7 +397,6 @@ function App() {
         </div>
       </header>
 
-      {/* Chat */}
       <div
         className="flex-1 p-6 overflow-y-auto flex flex-col gap-4 bg-modern-dark-secondary scrollbar scrollbar-thumb-modern-dark-header-input scrollbar-track-modern-dark-primary"
         ref={chatContainerRef}
@@ -226,10 +411,12 @@ function App() {
             }`}
             style={msg.role === "bot" ? { padding: 0, margin: 0 } : {}}
           >
-            {msg.content}
+            {msg.role === "bot" ? <Formatter text={msg.content} /> : msg.content}
             <div
               className={`text-xs mt-2 ${
-                msg.role === "user" ? "text-indigo-100 text-right" : "text-modern-dark-text-secondary text-left"
+                msg.role === "user"
+                  ? "text-indigo-100 text-right"
+                  : "text-modern-dark-text-secondary text-left"
               }`}
             >
               {new Date(msg.timestamp).toLocaleTimeString()}
@@ -249,7 +436,6 @@ function App() {
         {isWaiting && <TypingIndicator />}
       </div>
 
-      {/* Input */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -273,17 +459,30 @@ function App() {
             disabled={isSendDisabled}
             className={`absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full text-white flex items-center justify-center transition-colors ${
               isTyping
-                ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-modern-dark-accent hover:bg-modern-dark-accent-hover'
-            } ${isSendDisabled ? 'bg-modern-dark-tertiary cursor-not-allowed opacity-50' : ''}`}
+                ? "bg-red-600 hover:bg-red-700"
+                : "bg-modern-dark-accent hover:bg-modern-dark-accent-hover"
+            } ${isSendDisabled ? "bg-modern-dark-tertiary cursor-not-allowed opacity-50" : ""}`}
           >
             {isTyping ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             ) : isWaiting ? (
               <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
                 <path
                   className="opacity-75"
                   fill="currentColor"
@@ -291,7 +490,12 @@ function App() {
                 />
               </svg>
             ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             )}
