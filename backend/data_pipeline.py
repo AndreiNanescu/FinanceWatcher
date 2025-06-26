@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 from tqdm import tqdm
 from typing import List, Dict, Optional
 
-from backend.rag import MarketNewsDB, ChromaMarketNews, MarketAuxGatherer
+from backend.data import MarketNewsDB, ChromaMarketNews
+from backend.data.gatherers import MarketAuxGatherer
 from .utils import Article, Entity, setup_logger, normalize_name
 
 logger = setup_logger(__name__)

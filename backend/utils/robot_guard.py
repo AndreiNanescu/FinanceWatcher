@@ -20,8 +20,7 @@ class RobotGuard:
             rp.read()
             self.parsers[base_url] = rp
             return rp
-        except Exception as e:
-            logger.warning(f"Failed to read robots.txt from {base_url}: {e}")
+        except Exception:
             return None
 
     def can_fetch(self, url: str) -> bool:
@@ -35,7 +34,6 @@ class RobotGuard:
         allowed = rp.can_fetch(self.user_agent, url)
         if not allowed:
             self.blocked_sites.add(parsed.netloc)
-            logger.info(f"Scraping blocked for {url}")
         return allowed
 
     def get_blocked_sites(self):

@@ -6,23 +6,10 @@ from .base import DataGatherer
 
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-
-import nltk
-
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
-
-try:
-    nltk.data.find('tokenizers/punkt_tab')
-except LookupError:
-    nltk.download('punkt_tab')
 from newspaper import Article as NewsPaperArticle
-
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 from backend.utils import (setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV,
-                           Entity, format_sentiment)
+                           Entity, format_sentiment, RobotGuard, ensure_nltk_punkt)
 from backend.utils import Article as MyArticle
 
 from pathlib import Path
@@ -65,6 +52,7 @@ class MarketAuxGatherer(DataGatherer):
         self.language = language
         self.filter_entities = filter_entities
         self.limit = limit
+        self.robot_guard = RobotGuard()
 
     def _save_raw_json(self, data: dict, base_dir: Optional[str] = None, published_on: Optional[str] = None) -> str:
         if published_on:
@@ -190,7 +178,7 @@ class MarketAuxGatherer(DataGatherer):
 
         return list(entity_map.values())
 
-    def get_data(self, days: int = 1, max_pages: int = 1) -> Optional[List[MyArticle]]:
+    def get_data(self, days: int = 1, max_pages: int = 1) -> Tuple[Optional[List[MyArticle]], Optional[List[str]]]:
         all_data = []
 
         for day_delta in range(days):
@@ -219,15 +207,20 @@ class MarketAuxGatherer(DataGatherer):
                 break
 
         if not all_data:
-            return None
+            return None, None
 
         cleaned_data = self._clean_data(all_data)
         expanded_data = self._expand_description(cleaned_data)
 
-        return expanded_data
+        blocked_sites = sorted(set(self.robot_guard.get_blocked_sites()))
 
-    @staticmethod
-    def _scrape_article(url: str) -> dict:
+        return expanded_data, blocked_sites
+
+    def _scrape_article(self, url: str) -> dict:
+        if not self.robot_guard.can_fetch(url):
+            logger.info(f"Skipping scraping due to robots.txt disallow: {url}")
+            return {}
+
         try:
             article = NewsPaperArticle(url)
             article.download()
@@ -243,7 +236,7 @@ class MarketAuxGatherer(DataGatherer):
                 "summary": article.summary,
             }
         except Exception as e:
-            print(f"Failed to scrape {url}: {e}")
+            logger.warning(f"Failed to scrape {url}: {e}")
             return {}
 
     def _expand_description(self, news_articles: Union[MyArticle, List[MyArticle]]):
@@ -263,7 +256,7 @@ class MarketAuxGatherer(DataGatherer):
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1) -> Optional[Union[List[Dict], Dict]]:
     gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
 
-    data = gatherer.get_data(days=days, max_pages=max_pages)
+    data, blocked = gatherer.get_data(days=days, max_pages=max_pages)
 
     return data
 
