@@ -227,16 +227,16 @@ class MarketAuxGatherer(DataGatherer):
         for news_article in tqdm(news_articles, desc="Scraping articles"):
             scraped_data = self.article_scraper.scrape_article(news_article.url)
 
-            summary = scraped_data.get('summary', '')
-            keywords = ", ".join(scraped_data.get('keywords', []))
+            summary = scraped_data.get('summary', '').strip()
+            if not summary:
+                continue
 
+            keywords = ", ".join(scraped_data.get('keywords', []))
             news_article.description = f"{summary}\nKeywords: {keywords}"
 
-            if summary:
-                news_article.description = f"{summary}\nKeywords: {keywords}"
-                expanded_articles.append(news_article)
+            expanded_articles.append(news_article)
 
-        return news_articles
+        return expanded_articles
 
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1):
     gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)

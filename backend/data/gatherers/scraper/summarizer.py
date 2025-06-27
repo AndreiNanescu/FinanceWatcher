@@ -29,15 +29,15 @@ class ArticleSummarizer:
 
     def summarize(self, text: str) -> Dict[str, object]:
         if not text.strip():
-            return {"summary_raw": "", "keywords": []}
+            return {"summary": "", "keywords": []}
 
         cleaned_text = self._clean_text(text)
 
         try:
-            summary_raw = self.llama3.summarize(cleaned_text)
-            summary_raw = self._postprocess_summary(summary_raw)
+            initial_summary = self.llama3.summarize(cleaned_text)
+            initial_summary = self._postprocess_summary(initial_summary)
 
-            summary_compressed = self.llama3.resummarize(summary_raw)
+            summary_compressed = self.llama3.resummarize(initial_summary)
 
             keywords = self._extract_keywords(cleaned_text)
 
