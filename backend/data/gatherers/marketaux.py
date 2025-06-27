@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Tuple
 from tqdm import tqdm
+from urllib.parse import urlparse
 
 from backend.utils import (setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV,
                            Entity, format_sentiment)
@@ -45,6 +46,22 @@ def parse_args():
         default=1,
         help="Number of pages to fetch for each day."
     )
+    parser.add_argument(
+        "--published-after",
+        type=str,
+        help="Fetch articles published after this date (YYYY-MM-DD)."
+    )
+    parser.add_argument(
+        "--published-before",
+        type=str,
+        help="Fetch articles published before this date (YYYY-MM-DD)."
+    )
+    parser.add_argument(
+        "--start-page",
+        type=int,
+        default=1,
+        help="Page number to start fetching from."
+    )
     return parser.parse_args()
 
 class MarketAuxGatherer(DataGatherer):
@@ -72,9 +89,12 @@ class MarketAuxGatherer(DataGatherer):
         save_dict_as_json(data, filepath)
         return str(filepath)
 
-    def _request_data(self, published_on: Optional[str] = None, page: int = 1) -> Optional[dict]:
+    def _request_data(self, published_on: Optional[str] = None, published_before: Optional[str] = None,
+                      published_after: Optional[str] = None, page: int = 1) -> Optional[dict]:
+
         api_key = os.getenv(MARKETAUX_API_KEY_ENV)
         url = os.getenv(MARKETAUX_BASE_URL_ENV)
+
         if not api_key or not url:
             logger.error(f"Missing environment variables {MARKETAUX_API_KEY_ENV} or {MARKETAUX_BASE_URL_ENV}")
             return None
@@ -94,6 +114,20 @@ class MarketAuxGatherer(DataGatherer):
                 params['published_on'] = published_on
             except ValueError:
                 logger.warning(f"Invalid published_on date format: {published_on}. Expected YYYY-MM-DD.")
+
+        if published_before:
+            try:
+                datetime.strptime(published_before, "%Y-%m-%d")
+                params['published_before'] = published_before
+            except ValueError:
+                logger.warning(f"Invalid published_on date format: {published_before}. Expected YYYY-MM-DD.")
+
+        if published_on:
+            try:
+                datetime.strptime(published_after, "%Y-%m-%d")
+                params['published_after'] = published_after
+            except ValueError:
+                logger.warning(f"Invalid published_on date format: {published_after}. Expected YYYY-MM-DD.")
 
         try:
             response = requests.get(url=url, params=params)
@@ -145,7 +179,6 @@ class MarketAuxGatherer(DataGatherer):
                     description=article.get("description", "no description"),
                     url=article.get("url", "no url"),
                     published_at=article.get("published_at", "no date"),
-                    source=article.get("source", "no source"),
                     entities=self._deduplicate_entities(article.get("entities", []))
                 )
                 cleaned_articles.append(cleaned_article)
@@ -181,43 +214,74 @@ class MarketAuxGatherer(DataGatherer):
 
         return list(entity_map.values())
 
-    def get_data(self, days: int = 1, max_pages: int = 1) -> Tuple[Optional[List[MyArticle]], Optional[List[str]]]:
+    def _fetch_by_days(self, days: int, max_pages: int, start_page: int) -> List[dict]:
         all_data = []
-
         for day_delta in range(days):
             date_str = (datetime.utcnow() - timedelta(days=day_delta)).strftime("%Y-%m-%d") if days > 1 else None
-
-            for page in range(1, max_pages + 1):
+            for page in range(start_page, start_page + max_pages):
                 try:
                     data = self._request_data(published_on=date_str, page=page) if date_str else self._request_data(
                         page=page)
                 except StopFetching as e:
                     logger.info(f"Stopped fetching data early due to API error: {e}")
-                    break
-                if not data:
-                    break
+                    return all_data
 
-                articles = data.get("data", [])
-                if not articles:
-                    break
+                if not data or not data.get("data"):
+                    return all_data
 
                 all_data.append(data)
-
-                if len(articles) < self.limit:
-                    break
+                if len(data.get("data", [])) < self.limit:
+                    return all_data
 
             if days == 1:
                 break
+        return all_data
 
-        if not all_data:
+    def _fetch_by_date_range(self, published_after: Optional[str], published_before: Optional[str], max_pages: int,
+                             start_page: int) -> List[dict]:
+        all_data = []
+        for page in range(start_page, start_page + max_pages):
+            try:
+                data = self._request_data(
+                    published_after=published_after,
+                    published_before=published_before,
+                    page=page
+                )
+            except StopFetching as e:
+                logger.info(f"Stopped fetching data early due to API error: {e}")
+                return all_data
+
+            if not data or not data.get("data"):
+                return all_data
+
+            all_data.append(data)
+            if len(data.get("data", [])) < self.limit:
+                return all_data
+        return all_data
+
+    def get_data(self,days: int = 1,max_pages: int = 1,published_after: Optional[str] = None,
+                 published_before: Optional[str] = None, start_page: int = 1) -> Tuple[Optional[List[MyArticle]], Optional[List[str]]]:
+
+        logger.info(
+            f"Fetching data with parameters - days: {days}, max_pages: {max_pages}, "
+            f"published_after: {published_after}, published_before: {published_before}, start_page: {start_page}"
+        )
+
+        if published_after is None and published_before is None:
+            raw_data = self._fetch_by_days(days, max_pages, start_page)
+        else:
+            raw_data = self._fetch_by_date_range(published_after, published_before, max_pages, start_page)
+
+        if not raw_data:
             return None, None
 
-        cleaned_data = self._clean_data(all_data)
+        cleaned_data = self._clean_data(raw_data)
         expanded_data = self._expand_description(cleaned_data)
 
         blacklist = self.article_scraper.get_blacklisted_domains()
+        blacklist_domains = list({urlparse(url).netloc for url in blacklist if urlparse(url).netloc})
 
-        return expanded_data, blacklist
+        return expanded_data, blacklist_domains
 
     def _expand_description(self, news_articles: Union[MyArticle, List[MyArticle]]):
         if isinstance(news_articles, MyArticle):
@@ -238,10 +302,13 @@ class MarketAuxGatherer(DataGatherer):
 
         return expanded_articles
 
-def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1):
+def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1,
+         published_after: Optional[str] = None, published_before: Optional[str] = None, start_page: int = 1):
     gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
 
-    data, blocked = gatherer.get_data(days=days, max_pages=max_pages)
+    data, blocked = gatherer.get_data(
+        days=days, max_pages=max_pages, published_after=published_after,published_before=published_before, start_page=start_page
+    )
 
     return data, blocked
 
@@ -251,4 +318,8 @@ if __name__ == "__main__":
     main(symbols=args.symbols,
          days=args.days,
          save_data=args.save_data,
-         max_pages=args.max_pages)
+         max_pages=args.max_pages,
+         published_after=args.published_after,
+         published_before=args.published_before,
+         start_page=args.start_page,
+         )
