@@ -6,13 +6,15 @@ from .base import DataGatherer
 
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from newspaper import Article as NewsPaperArticle
+from pathlib import Path
 from typing import Dict, List, Optional, Union, Tuple
+from tqdm import tqdm
+
 from backend.utils import (setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV,
-                           Entity, format_sentiment, RobotGuard, ensure_nltk_punkt)
+                           Entity, format_sentiment)
 from backend.utils import Article as MyArticle
 
-from pathlib import Path
+from .scraper import ArticleScraper
 
 logger = setup_logger(__name__)
 load_dotenv()
@@ -52,7 +54,8 @@ class MarketAuxGatherer(DataGatherer):
         self.language = language
         self.filter_entities = filter_entities
         self.limit = limit
-        self.robot_guard = RobotGuard()
+        self.article_scraper = ArticleScraper()
+
 
     def _save_raw_json(self, data: dict, base_dir: Optional[str] = None, published_on: Optional[str] = None) -> str:
         if published_on:
@@ -212,53 +215,35 @@ class MarketAuxGatherer(DataGatherer):
         cleaned_data = self._clean_data(all_data)
         expanded_data = self._expand_description(cleaned_data)
 
-        blocked_sites = sorted(set(self.robot_guard.get_blocked_sites()))
+        blacklist = self.article_scraper.get_blacklisted_domains()
 
-        return expanded_data, blocked_sites
-
-    def _scrape_article(self, url: str) -> dict:
-        if not self.robot_guard.can_fetch(url):
-            logger.info(f"Skipping scraping due to robots.txt disallow: {url}")
-            return {}
-
-        try:
-            article = NewsPaperArticle(url)
-            article.download()
-            article.parse()
-            article.nlp()
-
-            return {
-                "title": article.title,
-                "text": article.text,
-                "authors": article.authors,
-                "publish_date": article.publish_date,
-                "keywords": article.keywords,
-                "summary": article.summary,
-            }
-        except Exception as e:
-            logger.warning(f"Failed to scrape {url}: {e}")
-            return {}
+        return expanded_data, blacklist
 
     def _expand_description(self, news_articles: Union[MyArticle, List[MyArticle]]):
         if isinstance(news_articles, MyArticle):
             news_articles = [news_articles]
 
-        for news_article in news_articles:
-            scraped_data = self._scrape_article(news_article.url)
+        expanded_articles = []
+        for news_article in tqdm(news_articles, desc="Scraping articles"):
+            scraped_data = self.article_scraper.scrape_article(news_article.url)
 
             summary = scraped_data.get('summary', '')
             keywords = ", ".join(scraped_data.get('keywords', []))
 
             news_article.description = f"{summary}\nKeywords: {keywords}"
 
+            if summary:
+                news_article.description = f"{summary}\nKeywords: {keywords}"
+                expanded_articles.append(news_article)
+
         return news_articles
 
-def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1) -> Optional[Union[List[Dict], Dict]]:
+def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1):
     gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
 
     data, blocked = gatherer.get_data(days=days, max_pages=max_pages)
 
-    return data
+    return data, blocked
 
 
 if __name__ == "__main__":

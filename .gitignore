@@ -3,4 +3,3 @@
 backend/rag/raw
 backend/db/
 logs/
-backend/data/gatherers/gatherer_logs

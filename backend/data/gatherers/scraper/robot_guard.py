@@ -1,3 +1,5 @@
+import requests
+
 import urllib.robotparser
 from urllib.parse import urlparse
 from backend.utils import setup_logger
@@ -14,13 +16,16 @@ class RobotGuard:
         if base_url in self.parsers:
             return self.parsers[base_url]
 
-        rp = urllib.robotparser.RobotFileParser()
-        rp.set_url(f"{base_url}/robots.txt")
+        robots_url = f"{base_url}/robots.txt"
         try:
-            rp.read()
+            response = requests.get(robots_url, timeout=5)
+            response.raise_for_status()
+            rp = urllib.robotparser.RobotFileParser()
+            rp.parse(response.text.splitlines())
             self.parsers[base_url] = rp
             return rp
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to fetch robots.txt from {robots_url}: {e}")
             return None
 
     def can_fetch(self, url: str) -> bool:
@@ -34,6 +39,7 @@ class RobotGuard:
         allowed = rp.can_fetch(self.user_agent, url)
         if not allowed:
             self.blocked_sites.add(parsed.netloc)
+            logger.info(f"Scraping blocked for {url}")
         return allowed
 
     def get_blocked_sites(self):
