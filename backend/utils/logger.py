@@ -2,8 +2,20 @@ import logging
 from pathlib import Path
 from datetime import datetime
 import sys
+from tqdm import tqdm
 
 LOG_FILE_PATH = None
+
+
+class TqdmLoggingHandler(logging.StreamHandler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            tqdm.write(msg)
+            self.flush()
+        except Exception:
+            self.handleError(record)
+
 
 def setup_logger(name: str = __name__, level=logging.DEBUG):
     global LOG_FILE_PATH
@@ -33,7 +45,8 @@ def setup_logger(name: str = __name__, level=logging.DEBUG):
     if logger.hasHandlers():
         return logger
 
-    stream_handler = logging.StreamHandler()
+    # Stream handler that doesn't mess up tqdm
+    stream_handler = TqdmLoggingHandler()
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
 
