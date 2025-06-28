@@ -9,7 +9,6 @@ class Article:
     description: str
     url: str
     published_at: str
-    source: str
     entities: list['Entity']
 
 
