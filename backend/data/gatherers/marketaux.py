@@ -1,4 +1,3 @@
-import argparse
 import os
 import requests
 
@@ -21,49 +20,6 @@ logger = setup_logger(__name__)
 load_dotenv()
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Fetch MarketAux articles for given symbols over past days.")
-    parser.add_argument(
-        "--symbols",
-        nargs="+",
-        required=True,
-        help="List of stock symbols, e.g. AAPL GOOGL MSFT"
-    )
-    parser.add_argument(
-        "--days",
-        type=int,
-        default=1,
-        help="Number of days in the past to fetch data for. 1 means today only."
-    )
-    parser.add_argument(
-        "--save-data",
-        action="store_true",
-        help="Save the raw data or not."
-    )
-    parser.add_argument(
-        "--max-pages",
-        type=int,
-        default=1,
-        help="Number of pages to fetch for each day."
-    )
-    parser.add_argument(
-        "--published-after",
-        type=str,
-        help="Fetch articles published after this date (YYYY-MM-DD)."
-    )
-    parser.add_argument(
-        "--published-before",
-        type=str,
-        help="Fetch articles published before this date (YYYY-MM-DD)."
-    )
-    parser.add_argument(
-        "--start-page",
-        type=int,
-        default=1,
-        help="Page number to start fetching from."
-    )
-    return parser.parse_args()
-
 class MarketAuxGatherer(DataGatherer):
     def __init__(self, symbols: List[str], save_data: bool = False, language: str = "en", filter_entities: bool = True,
                  limit: int = 3):
@@ -73,6 +29,19 @@ class MarketAuxGatherer(DataGatherer):
         self.limit = limit
         self.article_scraper = ArticleScraper()
 
+        self.blacklist = []
+        self.uuids = []
+
+        self.stats = {
+            'duplicates': 0,
+            'blacklisted': 0,
+        }
+
+    def set_blacklist(self,  blacklist: List[str]) -> None:
+        self.blacklist.extend(blacklist)
+
+    def set_uuid(self, uuids: List[str]) -> None:
+        self.uuids.extend(uuids)
 
     def _save_raw_json(self, data: dict, base_dir: Optional[str] = None, published_on: Optional[str] = None) -> str:
         if published_on:
@@ -122,7 +91,7 @@ class MarketAuxGatherer(DataGatherer):
             except ValueError:
                 logger.warning(f"Invalid published_on date format: {published_before}. Expected YYYY-MM-DD.")
 
-        if published_on:
+        if published_after:
             try:
                 datetime.strptime(published_after, "%Y-%m-%d")
                 params['published_after'] = published_after
@@ -164,6 +133,15 @@ class MarketAuxGatherer(DataGatherer):
         for response in data:
             for article in response.get("data", []):
                 entities = []
+
+                if article['uuid'] in self.uuids:
+                    self.stats['duplicates'] += 1
+                    continue
+
+                if article['url'] in self.blacklist:
+                    self.stats['blacklisted'] += 1
+                    continue
+
                 for ent in article.get("entities", []):
                     entity = Entity(
                         symbol=ent.get("symbol", "no symbol"),
@@ -262,11 +240,6 @@ class MarketAuxGatherer(DataGatherer):
     def get_data(self,days: int = 1,max_pages: int = 1,published_after: Optional[str] = None,
                  published_before: Optional[str] = None, start_page: int = 1) -> Tuple[Optional[List[MyArticle]], Optional[List[str]]]:
 
-        logger.info(
-            f"Fetching data with parameters - days: {days}, max_pages: {max_pages}, "
-            f"published_after: {published_after}, published_before: {published_before}, start_page: {start_page}"
-        )
-
         if published_after is None and published_before is None:
             raw_data = self._fetch_by_days(days, max_pages, start_page)
         else:
@@ -278,10 +251,12 @@ class MarketAuxGatherer(DataGatherer):
         cleaned_data = self._clean_data(raw_data)
         expanded_data = self._expand_description(cleaned_data)
 
-        blacklist = self.article_scraper.get_blacklisted_domains()
-        blacklist_domains = list({urlparse(url).netloc for url in blacklist if urlparse(url).netloc})
+        blacklist_url_list = self.article_scraper.get_blacklisted_domains()
 
-        return expanded_data, blacklist_domains
+        logger.info(f"Fetched articles: {len(expanded_data)} new | {self.stats['duplicates']} duplicates, "
+                    f"blacklisted: {len(blacklist_url_list)} new | {self.stats['blacklisted']} already")
+
+        return expanded_data, blacklist_url_list
 
     def _expand_description(self, news_articles: Union[MyArticle, List[MyArticle]]):
         if isinstance(news_articles, MyArticle):
@@ -301,25 +276,3 @@ class MarketAuxGatherer(DataGatherer):
             expanded_articles.append(news_article)
 
         return expanded_articles
-
-def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1,
-         published_after: Optional[str] = None, published_before: Optional[str] = None, start_page: int = 1):
-    gatherer = MarketAuxGatherer(symbols=symbols, save_data=save_data)
-
-    data, blocked = gatherer.get_data(
-        days=days, max_pages=max_pages, published_after=published_after,published_before=published_before, start_page=start_page
-    )
-
-    return data, blocked
-
-
-if __name__ == "__main__":
-    args = parse_args()
-    main(symbols=args.symbols,
-         days=args.days,
-         save_data=args.save_data,
-         max_pages=args.max_pages,
-         published_after=args.published_after,
-         published_before=args.published_before,
-         start_page=args.start_page,
-         )
