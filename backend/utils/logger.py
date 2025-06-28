@@ -2,10 +2,25 @@ import logging
 from pathlib import Path
 from datetime import datetime
 import sys
+from tqdm import tqdm
 
 LOG_FILE_PATH = None
 
-def setup_logger(name: str = __name__, level=logging.DEBUG):
+
+class TqdmLoggingHandler(logging.StreamHandler):
+    def __init__(self, stream=sys.stdout):
+        super().__init__(stream)
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            tqdm.write(msg)  # crucial to separate from tqdm bar
+            self.flush()
+        except Exception:
+            self.handleError(record)
+
+
+def setup_logger(name: str = "shared_run_logger", level=logging.DEBUG):
     global LOG_FILE_PATH
 
     # Auto-detect if main script is 'data_pipeline.py'
@@ -27,13 +42,13 @@ def setup_logger(name: str = __name__, level=logging.DEBUG):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    logger = logging.getLogger("shared_run_logger")
+    logger = logging.getLogger(name)
     logger.setLevel(level)
 
     if logger.hasHandlers():
         return logger
 
-    stream_handler = logging.StreamHandler()
+    stream_handler = TqdmLoggingHandler()
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
 

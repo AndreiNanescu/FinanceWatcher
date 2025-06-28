@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
-from backend.rag.reranker import BGEReranker
-from backend.rag.embedder import Embedder
+from backend.rag import BGEReranker
+from backend.rag import Embedder
 from backend.utils import NewsDocument, Article, setup_logger, Candidate
 
 logger = setup_logger(__name__)
