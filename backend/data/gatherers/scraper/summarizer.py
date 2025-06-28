@@ -27,7 +27,7 @@ class ArticleSummarizer:
             self.keyword_extractor = KeyBERT()
 
 
-    def summarize(self, text: str) -> Dict[str, object]:
+    def summarize(self, text: str) -> Dict[str, str]:
         if not text.strip():
             return {"summary": "", "keywords": []}
 
