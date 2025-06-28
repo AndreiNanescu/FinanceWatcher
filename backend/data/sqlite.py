@@ -156,3 +156,31 @@ class MarketNewsDB:
         except sqlite3.Error as e:
             logger.error(f"Error inserting blacklisted URLs: {e}")
             raise
+
+    def clear_blacklist(self) -> None:
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
+        try:
+            with self.conn:
+                self.conn.execute("DELETE FROM blacklisted_entities;")
+            logger.info("Cleared all blacklisted URLs.")
+        except sqlite3.Error as e:
+            logger.error(f"Failed to clear blacklist: {e}")
+            raise
+
+    def delete_articles_by_description(self, description_substring: str):
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
+        try:
+            with self.conn:
+                cursor = self.conn.execute(
+                    "DELETE FROM articles WHERE description LIKE ?",
+                    ('%' + description_substring + '%',)
+                )
+                deleted_count = cursor.rowcount
+            logger.info(f"Deleted {deleted_count} articles matching description pattern: {description_substring}")
+        except sqlite3.Error as e:
+            logger.error(f"Failed to delete articles by description pattern '{description_substring}': {e}")
+            raise
+
+
