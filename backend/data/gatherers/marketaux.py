@@ -138,7 +138,7 @@ class MarketAuxGatherer(DataGatherer):
                     self.stats['duplicates'] += 1
                     continue
 
-                if article['url'] in self.blacklist:
+                if (article['url'] in self.blacklist) or (urlparse(article['url']).netloc in self.blacklist):
                     self.stats['blacklisted'] += 1
                     continue
 
@@ -251,10 +251,10 @@ class MarketAuxGatherer(DataGatherer):
         cleaned_data = self._clean_data(raw_data)
         expanded_data = self._expand_description(cleaned_data)
 
-        blacklist_url_list = self.article_scraper.get_blacklisted_domains()
+        blacklist_url_list = self.article_scraper.get_blacklisted_urls()
 
         logger.info(f"Fetched articles: {len(expanded_data)} new | {self.stats['duplicates']} duplicates, "
-                    f"blacklisted: {len(blacklist_url_list)} new | {self.stats['blacklisted']} already")
+                    f"blacklisted: {len(blacklist_url_list)} new | {self.stats['blacklisted']} duplicates")
 
         return expanded_data, blacklist_url_list
 
