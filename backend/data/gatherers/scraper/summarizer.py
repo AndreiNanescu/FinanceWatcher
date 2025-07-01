@@ -50,12 +50,17 @@ class ArticleSummarizer:
 
     @staticmethod
     def _clean_text(text: str) -> str:
+        blocklist = ["subscribe", "sign up", "download", "alert"]
         lines = text.splitlines()
-        useful_lines = [
-            line for line in lines
-            if len(line.strip()) > 40 and
-            not any(phrase in line.lower() for phrase in ["subscribe", "sign up", "download", "alert"])
-        ]
+        useful_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if len(stripped) <= 40:
+                continue
+
+            if any(re.search(rf"\b{re.escape(phrase)}\b", stripped.lower()) for phrase in blocklist):
+                continue
+            useful_lines.append(stripped)
         return "\n".join(useful_lines)
 
     @staticmethod
