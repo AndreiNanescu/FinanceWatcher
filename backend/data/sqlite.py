@@ -184,3 +184,40 @@ class MarketNewsDB:
             raise
 
 
+    def export_articles_to_json(self, n: int, file_path: Union[str, Path] = "exported_articles.json") -> str:
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
+
+        try:
+            cursor = self.conn.execute(
+                "SELECT uuid, title, description, url, published_at, entities_json FROM articles ORDER BY published_at DESC LIMIT ?",
+                (n,)
+            )
+            rows = cursor.fetchall()
+
+            articles_list = []
+            for row in rows:
+                article_dict = {
+                    "uuid": row[0],
+                    "title": row[1],
+                    "description": row[2],
+                    "url": row[3],
+                    "published_at": row[4],
+                    "entities": json.loads(row[5]) if row[5] else []
+                }
+                articles_list.append(article_dict)
+
+            json_data = json.dumps(articles_list, indent=2)
+
+            # Save to file
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(json_data)
+
+            logger.info(f"Exported {len(articles_list)} articles to JSON file: {file_path}")
+
+            return json_data
+
+        except Exception as e:
+            logger.error(f"Failed to export articles to JSON: {e}")
+            raise
+
