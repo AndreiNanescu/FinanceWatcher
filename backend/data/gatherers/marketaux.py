@@ -167,23 +167,30 @@ class MarketAuxGatherer(DataGatherer):
     def _deduplicate_entities(raw_entities: List[Dict]) -> List[Entity]:
         entity_map = {}
 
+        def base_sym(sym: str) -> str:
+            return sym.split('.')[0].upper()
+
+        def is_better_entity(new_sym: str, old_sym: str) -> bool:
+            if old_sym is None:
+                return True
+            if base_sym(new_sym) == base_sym(old_sym):
+                return len(new_sym) < len(old_sym)
+            return '.' not in new_sym and '.' in old_sym
+
         for ent in raw_entities:
             name = ent.get("name", "").strip()
-            symbol = ent.get("symbol", "")
+            symbol = ent.get("symbol", "").strip()
 
-            if not name:
+            if not name or not symbol:
                 continue
 
-            existing = entity_map.get(name)
+            name_norm = name.lower()
+            symbol_norm = symbol.upper()
 
-            is_better = (
-                    existing is None or
-                    (symbol.isupper() and '.' not in symbol) or
-                    ('.US' in symbol and '.US' not in existing.symbol)
-            )
+            existing = entity_map.get(name_norm)
 
-            if is_better:
-                entity_map[name] = Entity(
+            if existing is None or is_better_entity(symbol_norm, existing.symbol.upper()):
+                entity_map[name_norm] = Entity(
                     symbol=symbol,
                     name=name,
                     sentiment=format_sentiment(ent.get("sentiment_score", 0.0)),
@@ -191,7 +198,6 @@ class MarketAuxGatherer(DataGatherer):
                 )
 
         return list(entity_map.values())
-
     def _fetch_by_days(self, days: int, max_pages: int, start_page: int) -> List[dict]:
         all_data = []
         for day_delta in range(days):
