@@ -6,13 +6,13 @@ from .base import DataGatherer
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from pathlib import Path
+from rapidfuzz import fuzz
 from typing import Dict, List, Optional, Union, Tuple
 from tqdm import tqdm
 from urllib.parse import urlparse
 
 from backend.utils import (setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV,
-                           Entity, format_sentiment)
-from backend.utils import Article as MyArticle
+                           Entity, format_sentiment, normalize_name, Article)
 
 from .scraper import ArticleScraper
 
@@ -124,7 +124,7 @@ class MarketAuxGatherer(DataGatherer):
             logger.error(f"Unexpected request error: {e}")
             raise StopFetching("Request error occurred, stopping fetching.")
 
-    def _clean_data(self, data: Union[List[Dict], Dict]) -> List[MyArticle]:
+    def _clean_data(self, data: Union[List[Dict], Dict]) -> List[Article]:
         if isinstance(data, dict):
             data = [data]
 
@@ -151,53 +151,48 @@ class MarketAuxGatherer(DataGatherer):
                     )
                     entities.append(entity)
 
-                cleaned_article = MyArticle(
+                cleaned_article = Article(
                     uuid=article.get("uuid", "no uuid"),
                     title=article.get("title", "no title"),
                     description=article.get("description", "no description"),
                     url=article.get("url", "no url"),
                     published_at=article.get("published_at", "no date"),
-                    entities=self._deduplicate_entities(article.get("entities", []))
+                    fetched_on=datetime.now().strftime("%B %d, %Y at %I:%M %p"),
+                    entities=self._deduplicate_entities(entities)
                 )
                 cleaned_articles.append(cleaned_article)
 
         return cleaned_articles
 
     @staticmethod
-    def _deduplicate_entities(raw_entities: List[Dict]) -> List[Entity]:
-        entity_map = {}
-
-        def base_sym(sym: str) -> str:
-            return sym.split('.')[0].upper()
-
-        def is_better_entity(new_sym: str, old_sym: str) -> bool:
-            if old_sym is None:
-                return True
-            if base_sym(new_sym) == base_sym(old_sym):
-                return len(new_sym) < len(old_sym)
-            return '.' not in new_sym and '.' in old_sym
+    def _deduplicate_entities(raw_entities: List[Entity], threshold: int = 60) -> List[Entity]:
+        clusters: List[List[Entity]] = []
 
         for ent in raw_entities:
-            name = ent.get("name", "").strip()
-            symbol = ent.get("symbol", "").strip()
+            matched_cluster = None
+            for cluster in clusters:
+                if any(fuzz.token_sort_ratio(normalize_name(ent.name), normalize_name(c_ent.name)) >= threshold for c_ent in
+                       cluster):
+                    matched_cluster = cluster
+                    break
+            if matched_cluster is not None:
+                matched_cluster.append(ent)
+            else:
+                clusters.append([ent])
 
-            if not name or not symbol:
-                continue
+        deduped = []
+        for cluster in clusters:
+            simple_symbols = [e for e in cluster if '.' not in e.symbol]
+            chosen = simple_symbols[0] if simple_symbols else cluster[0]
+            deduped.append(Entity(
+                symbol=chosen.symbol,
+                name=chosen.name,
+                sentiment=chosen.sentiment,
+                industry=chosen.industry
+            ))
 
-            name_norm = name.lower()
-            symbol_norm = symbol.upper()
+        return deduped
 
-            existing = entity_map.get(name_norm)
-
-            if existing is None or is_better_entity(symbol_norm, existing.symbol.upper()):
-                entity_map[name_norm] = Entity(
-                    symbol=symbol,
-                    name=name,
-                    sentiment=format_sentiment(ent.get("sentiment_score", 0.0)),
-                    industry=ent.get("industry")
-                )
-
-        return list(entity_map.values())
     def _fetch_by_days(self, days: int, max_pages: int, start_page: int) -> List[dict]:
         all_data = []
         for day_delta in range(days):
@@ -244,7 +239,7 @@ class MarketAuxGatherer(DataGatherer):
         return all_data
 
     def get_data(self,days: int = 1,max_pages: int = 1,published_after: Optional[str] = None,
-                 published_before: Optional[str] = None, start_page: int = 1) -> Tuple[Optional[List[MyArticle]], Optional[List[str]]]:
+                 published_before: Optional[str] = None, start_page: int = 1) -> Tuple[Optional[List[Article]], Optional[List[str]]]:
 
         if published_after is None and published_before is None:
             raw_data = self._fetch_by_days(days, max_pages, start_page)
@@ -264,8 +259,8 @@ class MarketAuxGatherer(DataGatherer):
 
         return expanded_data, blacklist_url_list
 
-    def _expand_description(self, news_articles: Union[MyArticle, List[MyArticle]]):
-        if isinstance(news_articles, MyArticle):
+    def _expand_description(self, news_articles: Union[Article, List[Article]]):
+        if isinstance(news_articles, Article):
             news_articles = [news_articles]
 
         expanded_articles = []
