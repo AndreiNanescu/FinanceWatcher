@@ -9,6 +9,7 @@ class Article:
     description: str
     url: str
     published_at: str
+    fetched_on: str
     entities: list['Entity']
 
 

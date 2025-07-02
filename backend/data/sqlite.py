@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS articles (
     description TEXT,
     url TEXT UNIQUE,
     published_at TEXT,
+    fetched_on TEXT,
     entities_json TEXT -- JSON-encoded list of Entity objects
 );
 '''
@@ -86,6 +87,7 @@ class MarketNewsDB:
             article.description,
             article.url,
             article.published_at,
+            article.fetched_on,
             entities_json,
         )
 
@@ -112,8 +114,8 @@ class MarketNewsDB:
             with self.conn:
                 self.conn.executemany(
                     '''INSERT OR IGNORE INTO articles 
-                       (uuid, title, description, url, published_at, entities_json)
-                       VALUES (?, ?, ?, ?, ?, ?)''',
+                       (uuid, title, description, url, published_at, fetched_on, entities_json)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)''',
                     [self._serialize_article(article) for article in articles]
                 )
                 self._update_last_updated()
@@ -190,7 +192,7 @@ class MarketNewsDB:
 
         try:
             cursor = self.conn.execute(
-                "SELECT uuid, title, description, url, published_at, entities_json FROM articles ORDER BY published_at DESC LIMIT ?",
+                "SELECT uuid, title, description, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC LIMIT ?",
                 (n,)
             )
             rows = cursor.fetchall()
@@ -203,7 +205,8 @@ class MarketNewsDB:
                     "description": row[2],
                     "url": row[3],
                     "published_at": row[4],
-                    "entities": json.loads(row[5]) if row[5] else []
+                    "fetched_on": row[5],
+                    "entities": json.loads(row[6]) if row[6] else []
                 }
                 articles_list.append(article_dict)
 
