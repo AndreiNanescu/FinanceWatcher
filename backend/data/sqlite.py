@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pathlib import Path
 from typing import Union, List
-from backend.utils import setup_logger, Article
+from backend.utils import setup_logger, Article, Entity
 
 logger = setup_logger(__name__)
 
@@ -224,3 +224,46 @@ class MarketNewsDB:
             logger.error(f"Failed to export articles to JSON: {e}")
             raise
 
+    def get_articles(self) -> List[Article]:
+        if self.conn is None:
+            raise RuntimeError("No DB connection")
+
+        try:
+            cursor = self.conn.execute(
+                "SELECT uuid, title, description, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC",
+            )
+            rows = cursor.fetchall()
+
+            articles_list = []
+
+            for row in rows:
+                entities_list = []
+
+                entities_json = json.loads(row[6] if row[6] else [])
+
+                for entity in entities_json:
+                    ent = Entity(
+                        symbol=entity['symbol'],
+                        name=entity['name'],
+                        sentiment=entity['sentiment'],
+                        industry=entity['industry']
+                    )
+                    entities_list.append(ent)
+
+                article = Article(
+                    uuid=row[0],
+                    title=row[1],
+                    description=row[2],
+                    url=row[3],
+                    published_at=row[4],
+                    fetched_on=row[5],
+                    entities=entities_list
+                )
+
+                articles_list.append(article)
+
+            return articles_list
+
+        except Exception as e:
+            logger.error(f"Failed to export articles to list: {e}")
+            raise
