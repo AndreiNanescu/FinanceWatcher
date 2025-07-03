@@ -3,9 +3,8 @@ import torch
 from typing import List, Tuple
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-from backend.utils import setup_logger
+from backend.utils import logger
 
-logger = setup_logger(__name__)
 
 class BGEReranker:
     def __init__(self, model_name: str = "BAAI/bge-reranker-base", device: str = None):

@@ -8,7 +8,6 @@ from typing import List, Dict
 from backend.data import ChromaMarketNews
 
 
-
 class Llama3:
     def __init__(self, chroma: ChromaMarketNews = None):
         self.chroma = chroma

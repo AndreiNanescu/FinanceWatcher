@@ -7,32 +7,18 @@ from typing import List, Dict, Optional, Tuple, Any
 
 from backend.rag import BGEReranker
 from backend.rag import Embedder
-from backend.utils import NewsDocument, Article, setup_logger, Candidate
-
-logger = setup_logger(__name__)
+from backend.utils import NewsDocument, Article, logger, Candidate
 
 
 class ChromaMarketNews:
     def __init__(self, db_path: str = "embeddings"):
         self._setup_chroma(db_path)
         self.reranker = BGEReranker()
-        self.stats = {
-            'articles_count': 0,
-            'entities_count': 0,
-            'duplicated_entities': 0
-        }
 
     def delete_article(self, article_id: str) -> None:
         results = self.collection.get(where={"article_id": {"$eq": article_id}})
         if results['ids']:
             self.collection.delete(ids=results['ids'])
-
-    def log_final_stats(self) -> None:
-        logger.info(
-            f"Index results: "
-            f"Articles: {self.stats['articles_count']} | "
-            f"Entities: {self.stats['entities_count']} new, {self.stats['duplicated_entities']} duplicates"
-        )
 
     def _setup_chroma(self, db_path: str):
         root_path = Path(__file__).resolve().parent.parent
@@ -54,25 +40,16 @@ class ChromaMarketNews:
             logger.warning("No articles to index.")
             return
 
-        self.stats['articles_count'] = len(articles)
-
         docs, metas, ids = self._build_documents(articles)
 
         new_docs, new_metas, new_ids = self._filter_existing_documents(docs, metas, ids)
 
         if not new_ids:
             logger.info("No new documents to add — all were already indexed.")
-            self.stats.update({
-                'entities_count': 0,
-                'duplicated_entities': len(docs)
-            })
             return
 
         self._add_to_collection(new_docs, new_metas, new_ids)
-        self.stats.update({
-            'entities_count': len(new_ids),
-            'duplicated_entities': len(docs) - len(new_ids)
-        })
+        logger.info(f"Indexing results: Articles {len(new_docs)} new | {len(docs) - len(new_docs)} duplicates")
 
     @staticmethod
     def _build_documents(articles: List[Article]) -> Tuple[List[str], List[Dict[str, Any]], List[str]]:

@@ -3,11 +3,11 @@ import argparse
 from dotenv import load_dotenv
 from typing import List, Optional
 
-from backend.data import MarketNewsDB
+from backend.data import MarketNewsDB, ChromaMarketNews
 from backend.data.gatherers import MarketAuxGatherer
-from .utils import setup_logger
+from backend.utils import logger
 
-logger = setup_logger(__name__)
+
 load_dotenv()
 
 
@@ -58,17 +58,18 @@ def parse_args():
 class DataPipeline:
     def __init__(self, days: int = 1, max_pages: int = 1,
                  published_after: Optional[str] = None, published_before: Optional[str] = None, start_page: int = 1,
-                 gatherer: Optional[MarketAuxGatherer] = None, db: Optional[MarketNewsDB] = None):
+                 gatherer: Optional[MarketAuxGatherer] = None, db: Optional[MarketNewsDB] = None,
+                 chroma: Optional[ChromaMarketNews] = None):
 
         self.days = days
         self.published_after = published_after
         self.published_before = published_before
         self.start_page = start_page
-        self.days = days
         self.max_pages = max_pages
 
         self.gatherer = gatherer
         self.db = db
+        self.chroma = chroma
 
         self._sync_gatherer_to_db()
 
@@ -87,15 +88,17 @@ class DataPipeline:
     def process(self) -> None:
         articles, blacklist = self._get_data()
         
-        self.db.add(articles)
-        self.db.add_to_blacklist(blacklist)
+        self.db.add(articles=articles)
+        self.db.add_to_blacklist(urls=blacklist)
 
+        self.chroma.index(articles=articles)
         self.db.close()
 
 
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1,
          published_after: Optional[str] = None, published_before: Optional[str] = None, start_page: int = 1,
-         gatherer: Optional[MarketAuxGatherer] = None, db: Optional[MarketNewsDB] = None):
+         gatherer: Optional[MarketAuxGatherer] = None, db: Optional[MarketNewsDB] = None,
+         chroma: Optional[ChromaMarketNews] = None) -> None:
 
     logger.info(f"Starting processing for symbols: {symbols} over {days} days, with {max_pages} pages per day,"
                 f"starting from page {start_page}")
@@ -103,9 +106,10 @@ def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: 
     try:
         gatherer = gatherer if gatherer is not None else MarketAuxGatherer(symbols=symbols, save_data=save_data)
         db = db if db is not None else MarketNewsDB()
+        chroma = chroma if chroma is not None else ChromaMarketNews()
 
-        pipeline = DataPipeline(gatherer=gatherer, db=db, days=days, max_pages=max_pages, published_after=published_after,
-                                published_before=published_before)
+        pipeline = DataPipeline(gatherer=gatherer, db=db, chroma=chroma, days=days, max_pages=max_pages,
+                                published_after=published_after, published_before=published_before)
         pipeline.process()
 
     except Exception as e:

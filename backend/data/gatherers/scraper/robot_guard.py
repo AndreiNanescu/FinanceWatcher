@@ -2,9 +2,8 @@ import requests
 
 import urllib.robotparser
 from urllib.parse import urlparse
-from backend.utils import setup_logger
+from backend.utils import logger
 
-logger = setup_logger(__name__)
 
 class RobotGuard:
     def __init__(self, user_agent: str = "*"):

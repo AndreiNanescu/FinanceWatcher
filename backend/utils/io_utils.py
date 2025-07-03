@@ -1,13 +1,11 @@
 import os
-import re
 import json
 
 from pathlib import Path
 from typing import Union
 
-from .logger import setup_logger
+from .logger import logger
 
-logger = setup_logger(__name__)
 
 def save_dict_as_json(data: dict, filepath: Union[str, Path]):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -19,7 +17,7 @@ def save_dict_as_json(data: dict, filepath: Union[str, Path]):
 def normalize_name(name: str) -> str:
     import re
     name = name.lower()
-    # Remove punctuation early
+
     name = re.sub(r'[^\w\s]', '', name)
     suffixes = [' corporation', ' corp', ' incorporated', ' inc', ' ltd', ' limited', ' co']
     for suffix in suffixes:
