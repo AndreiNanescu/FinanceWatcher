@@ -1,3 +1,5 @@
+import json
+
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, TypedDict
 from textwrap import dedent
@@ -43,27 +45,27 @@ class NewsDocument:
 
     @staticmethod
     def _build_content(article: Article) -> str:
-        return dedent(f"""
-                Title: {article.title}
-                Description: {article.description}
-            """).strip()
+        return dedent(f"""\
+    Title: {article.title}
+    Published at: {article.published_at}
+    Description: {article.description}
+    """).strip()
 
     @staticmethod
     def _build_metadata(article: Article) -> Dict[str, Any]:
         return {
             "article_id": article.uuid,
-            "title": article.title,
             "published_at": article.published_at,
             "url": article.url,
-            "entities": [
+            "entities": json.dumps([
                 {
                     "name": e.name,
                     "symbol": e.symbol,
                     "sentiment": e.sentiment,
-                    "industry": e.industry or "N/A",
+                    "industry": e.industry,
                 }
                 for e in article.entities
-            ],
+            ]),
         }
 
 class Candidate(TypedDict):
