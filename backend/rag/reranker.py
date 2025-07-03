@@ -33,8 +33,15 @@ class BGEReranker:
         with torch.no_grad():
             logits = self.model(**inputs).logits.squeeze(-1)
 
-        scores = logits.cpu().tolist()
-        passage_scores = list(zip(passages, scores))
+            min_val = logits.min()
+            max_val = logits.max()
+
+            if min_val == max_val:
+                scores = torch.ones_like(logits)
+            else:
+                scores = (logits - min_val) / (max_val - min_val)
+
+        passage_scores = [(p, s.item()) for p, s in zip(passages, scores)]
         passage_scores.sort(key=lambda x: x[1], reverse=True)
 
         return passage_scores[:top_k]

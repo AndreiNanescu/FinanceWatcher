@@ -88,7 +88,7 @@ class ChromaMarketNews:
             raise
 
     def query(self, query_text: str, n_results: int = 50, filters: Optional[dict] = None,
-              contains_text: Optional[str] = None, top_n_rerank: int = 5) -> List[Dict]:
+              contains_text: Optional[str] = None, top_n_rerank: int = 5, threshold: float = 0.75) -> List[Dict]:
 
         raw_results = self._execute_query(query_text, n_results, filters, contains_text)
         candidates = self._build_candidates(raw_results)
@@ -100,7 +100,7 @@ class ChromaMarketNews:
         if not recent_candidates:
             return []
 
-        final_results = self._rerank_candidates(query_text, recent_candidates, top_n_rerank)
+        final_results = self._rerank_candidates(query_text, recent_candidates, top_n_rerank, threshold)
         return final_results
 
     def _execute_query(self, query_text: str, n_results: int,
@@ -142,12 +142,23 @@ class ChromaMarketNews:
                 filtered.append(c)
         return filtered
 
-    def _rerank_candidates(self, query_text: str, candidates: List[Dict], top_n: int) -> List[Dict]:
+    def _rerank_candidates(self, query_text: str, candidates: List[Dict], top_n: int, threshold: float) -> List[Dict]:
         passages = [c["document"] for c in candidates]
         reranked = self.reranker.rerank(query_text, passages, top_k=top_n)
 
         top_candidates = []
         for passage, rerank_score in reranked:
+            if rerank_score >= threshold:
+                orig = next(c for c in candidates if c["document"] == passage)
+                top_candidates.append({
+                    "document": passage,
+                    "metadata": orig["metadata"],
+                    "retriever_score": orig["score"],
+                    "reranker_score": rerank_score,
+                })
+
+        if not top_candidates and reranked:
+            passage, rerank_score = reranked[0]
             orig = next(c for c in candidates if c["document"] == passage)
             top_candidates.append({
                 "document": passage,
@@ -155,6 +166,7 @@ class ChromaMarketNews:
                 "retriever_score": orig["score"],
                 "reranker_score": rerank_score,
             })
+
         top_candidates.sort(key=lambda x: x["reranker_score"], reverse=True)
         return top_candidates
 
