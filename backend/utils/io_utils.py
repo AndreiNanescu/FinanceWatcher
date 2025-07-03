@@ -25,3 +25,8 @@ def normalize_name(name: str) -> str:
             name = name[:-len(suffix)]
     name = ' '.join(name.split())
     return name
+
+def log_args(args_dict):
+    args_str = " | ".join(f"{k}={v}" for k, v in args_dict.items() if v is not None)
+    if args_str:
+        logger.info(f"Starting data pipeline with: {args_str}")

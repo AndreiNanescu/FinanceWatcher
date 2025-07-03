@@ -1,11 +1,12 @@
 import argparse
+import time
 
 from dotenv import load_dotenv
 from typing import List, Optional
 
 from backend.data import MarketNewsDB, ChromaMarketNews
 from backend.data.gatherers import MarketAuxGatherer
-from backend.utils import logger
+from backend.utils import logger, log_args
 
 
 load_dotenv()
@@ -86,6 +87,8 @@ class DataPipeline:
 
 
     def process(self) -> None:
+        start_time = time.time()
+
         articles, blacklist = self._get_data()
         
         self.db.add(articles=articles)
@@ -94,14 +97,23 @@ class DataPipeline:
         self.chroma.index(articles=articles)
         self.db.close()
 
+        elapsed = time.time() - start_time
+        logger.info(f"Data pipeline finished in {int(elapsed // 60)}m {elapsed % 60}s")
 
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1,
          published_after: Optional[str] = None, published_before: Optional[str] = None, start_page: int = 1,
          gatherer: Optional[MarketAuxGatherer] = None, db: Optional[MarketNewsDB] = None,
          chroma: Optional[ChromaMarketNews] = None) -> None:
 
-    logger.info(f"Starting processing for symbols: {symbols} over {days} days, with {max_pages} pages per day,"
-                f"starting from page {start_page}")
+    log_args({
+        "symbols": symbols,
+        "days": days,
+        "save_data": save_data,
+        "max_pages": max_pages,
+        "published_after": published_after,
+        "published_before": published_before,
+        "start_page": start_page,
+    })
 
     try:
         gatherer = gatherer if gatherer is not None else MarketAuxGatherer(symbols=symbols, save_data=save_data)

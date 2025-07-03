@@ -12,7 +12,7 @@ class BGEReranker:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = None
         self.model = None
-        logger.info("BGEReranker initialized but model/tokenizer not loaded yet.")
+        logger.info("BGEReranker initialized but model/tokenizer not loaded yet")
 
     def _load_model(self):
         if self.tokenizer is None or self.model is None:
@@ -21,7 +21,7 @@ class BGEReranker:
             self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
             self.model.to(self.device)
             self.model.eval()
-            logger.info("Model loaded and ready.")
+            logger.info("BGEReranker loaded and ready")
 
     def rerank(self, query: str, passages: List[str], top_k: int = 5) -> List[Tuple[str, float]]:
         self._load_model()
