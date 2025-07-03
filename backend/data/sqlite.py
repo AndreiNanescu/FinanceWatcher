@@ -270,3 +270,19 @@ class MarketNewsDB:
         except Exception as e:
             logger.error(f"Failed to export articles to list: {e}")
             raise
+
+    def delete_articles_by_url_pattern(self, pattern: str):
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
+        try:
+            with self.conn:
+                cursor = self.conn.execute(
+                    "DELETE FROM articles WHERE url LIKE ?",
+                    ('%' + pattern + '%',)
+                )
+                deleted_count = cursor.rowcount
+            logger.info(f"Deleted {deleted_count} articles with URL containing: {pattern}")
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to delete articles by URL pattern '{pattern}': {e}")
+            raise
