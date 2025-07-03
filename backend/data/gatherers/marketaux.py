@@ -4,20 +4,16 @@ import requests
 from .base import DataGatherer
 
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
 from pathlib import Path
 from rapidfuzz import fuzz
 from typing import Dict, List, Optional, Union, Tuple
 from tqdm import tqdm
 from urllib.parse import urlparse
 
-from backend.utils import (setup_logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV,
+from backend.utils import (logger, save_dict_as_json, StopFetching, MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV,
                            Entity, format_sentiment, normalize_name, Article)
 
 from .scraper import ArticleScraper
-
-logger = setup_logger(__name__)
-load_dotenv()
 
 
 class MarketAuxGatherer(DataGatherer):
@@ -158,7 +154,8 @@ class MarketAuxGatherer(DataGatherer):
                     url=article.get("url", "no url"),
                     published_at=article.get("published_at", "no date"),
                     fetched_on=datetime.now().strftime("%B %d, %Y at %I:%M %p"),
-                    entities=self._deduplicate_entities(entities)
+                    entities=self._deduplicate_entities(entities),
+                    keywords = "No keywords extracted"
                 )
                 cleaned_articles.append(cleaned_article)
 
@@ -271,8 +268,8 @@ class MarketAuxGatherer(DataGatherer):
             if not summary:
                 continue
 
-            keywords = ", ".join(scraped_data.get('keywords', []))
-            news_article.description = f"{summary}\nKeywords: {keywords}"
+            news_article.description = scraped_data['summary']
+            news_article.keywords = ", ".join(scraped_data['keywords'])
 
             expanded_articles.append(news_article)
 

@@ -9,6 +9,7 @@ class Article:
     uuid: str
     title: str
     description: str
+    keywords: str
     url: str
     published_at: str
     fetched_on: str
@@ -44,12 +45,18 @@ class NewsDocument:
         return cls(id=article.uuid, content=content, metadata=metadata)
 
     @staticmethod
-    def _build_content(article: Article) -> str:
+    def _build_content(article: 'Article') -> str:
+        description = article.description or ""
+        companies = ", ".join(
+            f"{entity.name} ({entity.symbol})"
+            for entity in article.entities
+        )
         return dedent(f"""\
-    Title: {article.title}
-    Published at: {article.published_at}
-    Description: {article.description}
-    """).strip()
+            Mentioned companies: {companies}
+            Keywords present: {article.keywords}
+            Title: {article.title}
+            Description: {description}
+        """).strip()
 
     @staticmethod
     def _build_metadata(article: Article) -> Dict[str, Any]:

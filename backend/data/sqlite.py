@@ -6,15 +6,15 @@ from datetime import datetime
 
 from pathlib import Path
 from typing import Union, List
-from backend.utils import setup_logger, Article, Entity
+from backend.utils import logger, Article, Entity
 
-logger = setup_logger(__name__)
 
 ARTICLES_TABLE = '''
 CREATE TABLE IF NOT EXISTS articles (
     uuid TEXT PRIMARY KEY,
     title TEXT,
     description TEXT,
+    keywords TEXT,
     url TEXT UNIQUE,
     published_at TEXT,
     fetched_on TEXT,
@@ -85,6 +85,7 @@ class MarketNewsDB:
             article.uuid,
             article.title,
             article.description,
+            article.keywords,
             article.url,
             article.published_at,
             article.fetched_on,
@@ -114,8 +115,8 @@ class MarketNewsDB:
             with self.conn:
                 self.conn.executemany(
                     '''INSERT OR IGNORE INTO articles 
-                       (uuid, title, description, url, published_at, fetched_on, entities_json)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                       (uuid, title, description, keywords, url, published_at, fetched_on, entities_json)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
                     [self._serialize_article(article) for article in articles]
                 )
                 self._update_last_updated()
@@ -192,7 +193,7 @@ class MarketNewsDB:
 
         try:
             cursor = self.conn.execute(
-                "SELECT uuid, title, description, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC LIMIT ?",
+                "SELECT uuid, title, description, keywords, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC LIMIT ?",
                 (n,)
             )
             rows = cursor.fetchall()
@@ -203,10 +204,11 @@ class MarketNewsDB:
                     "uuid": row[0],
                     "title": row[1],
                     "description": row[2],
-                    "url": row[3],
-                    "published_at": row[4],
-                    "fetched_on": row[5],
-                    "entities": json.loads(row[6]) if row[6] else []
+                    "keywords": row[3],
+                    "url": row[4],
+                    "published_at": row[5],
+                    "fetched_on": row[6],
+                    "entities": json.loads(row[7]) if row[7] else []
                 }
                 articles_list.append(article_dict)
 
@@ -230,7 +232,7 @@ class MarketNewsDB:
 
         try:
             cursor = self.conn.execute(
-                "SELECT uuid, title, description, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC",
+                "SELECT uuid, title, description, keywords, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC",
             )
             rows = cursor.fetchall()
 
@@ -239,7 +241,7 @@ class MarketNewsDB:
             for row in rows:
                 entities_list = []
 
-                entities_json = json.loads(row[6] if row[6] else [])
+                entities_json = json.loads(row[7] if row[7] else [])
 
                 for entity in entities_json:
                     ent = Entity(
@@ -254,9 +256,10 @@ class MarketNewsDB:
                     uuid=row[0],
                     title=row[1],
                     description=row[2],
-                    url=row[3],
-                    published_at=row[4],
-                    fetched_on=row[5],
+                    keywords=row[3],
+                    url=row[4],
+                    published_at=row[5],
+                    fetched_on=row[6],
                     entities=entities_list
                 )
 
