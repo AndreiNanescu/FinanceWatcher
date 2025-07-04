@@ -3,9 +3,8 @@ import torch
 from typing import List, Tuple
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-from backend.utils import setup_logger
+from backend.utils import logger
 
-logger = setup_logger(__name__)
 
 class BGEReranker:
     def __init__(self, model_name: str = "BAAI/bge-reranker-base", device: str = None):
@@ -13,7 +12,7 @@ class BGEReranker:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = None
         self.model = None
-        logger.info("BGEReranker initialized but model/tokenizer not loaded yet.")
+        logger.info("BGEReranker initialized but model/tokenizer not loaded yet")
 
     def _load_model(self):
         if self.tokenizer is None or self.model is None:
@@ -22,7 +21,7 @@ class BGEReranker:
             self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
             self.model.to(self.device)
             self.model.eval()
-            logger.info("Model loaded and ready.")
+            logger.info("BGEReranker loaded and ready")
 
     def rerank(self, query: str, passages: List[str], top_k: int = 5) -> List[Tuple[str, float]]:
         self._load_model()
@@ -34,8 +33,15 @@ class BGEReranker:
         with torch.no_grad():
             logits = self.model(**inputs).logits.squeeze(-1)
 
-        scores = logits.cpu().tolist()
-        passage_scores = list(zip(passages, scores))
+            min_val = logits.min()
+            max_val = logits.max()
+
+            if min_val == max_val:
+                scores = torch.ones_like(logits)
+            else:
+                scores = (logits - min_val) / (max_val - min_val)
+
+        passage_scores = [(p, s.item()) for p, s in zip(passages, scores)]
         passage_scores.sort(key=lambda x: x[1], reverse=True)
 
         return passage_scores[:top_k]

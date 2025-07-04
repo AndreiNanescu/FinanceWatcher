@@ -2,8 +2,8 @@ import threading
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from .llm import Llama3
-from .rag import ChromaMarketNews
+from backend.llm import Llama3
+from backend.data import ChromaMarketNews
 from .data_pipeline import main as pipeline
 
 app = Flask(__name__)

@@ -1,14 +1,13 @@
 import os
-import re
 import json
-import logging
 
 from pathlib import Path
 from typing import Union
 
+from .logger import logger
+
 
 def save_dict_as_json(data: dict, filepath: Union[str, Path]):
-    logger = logging.getLogger(__name__)
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
@@ -16,30 +15,19 @@ def save_dict_as_json(data: dict, filepath: Union[str, Path]):
 
 
 def normalize_name(name: str) -> str:
-    if not name:
-        return ""
+    import re
+    name = name.lower()
 
-    name = name.lower().strip()
-
-    suffix_map = {
-        r"\binc\b": "",
-        r"\binc\.\b": "",
-        r"\bltd\b": "",
-        r"\bltd\.\b": "",
-        r"\bcorp\b": "corporation",
-        r"\bcorp\.\b": "corporation",
-        r"\bllc\b": "",
-        r"\bllc\.\b": "",
-        r"\bco\b": "company",
-        r"\bco\.\b": "company"
-    }
-    for pattern, replacement in suffix_map.items():
-        name = re.sub(pattern, replacement, name)
-
-    name = re.sub(r"[^\w\s]", "", name)
-    name = re.sub(r"\s+", " ", name)
-    name = name.strip()
-    name = name.replace(" ", "_")
-    name = name.strip("_")
-
+    name = re.sub(r'[^\w\s]', '', name)
+    suffixes = [' corporation', ' corp', ' incorporated', ' inc', ' ltd', ' limited', ' co',
+                ' group', ' llc', ' company', ' technologies', ' services', ' ai', 'com']
+    for suffix in suffixes:
+        if name.endswith(suffix):
+            name = name[:-len(suffix)]
+    name = ' '.join(name.split())
     return name
+
+def log_args(args_dict):
+    args_str = " | ".join(f"{k}={v}" for k, v in args_dict.items() if v is not None)
+    if args_str:
+        logger.info(f"Starting data pipeline with: {args_str}")
