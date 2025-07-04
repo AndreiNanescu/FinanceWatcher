@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, TypedDict
 from textwrap import dedent
 
+from backend.utils import normalize_name
+
 @dataclass
 class Article:
     uuid: str
@@ -46,33 +48,30 @@ class NewsDocument:
 
     @staticmethod
     def _build_content(article: 'Article') -> str:
-        description = article.description or ""
-        companies = ", ".join(
-            f"{entity.name} ({entity.symbol})"
-            for entity in article.entities
-        )
         return dedent(f"""\
-            Mentioned companies: {companies}
-            Keywords present: {article.keywords}
             Title: {article.title}
-            Description: {description}
+            Keywords present: {article.keywords}
+            Description: {article.description}
         """).strip()
 
     @staticmethod
     def _build_metadata(article: Article) -> Dict[str, Any]:
+        entities = [
+            {
+                "name": e.name,
+                "symbol": e.symbol,
+                "sentiment": e.sentiment,
+                "industry": e.industry,
+            }
+            for e in article.entities
+        ]
+
         return {
-            "article_id": article.uuid,
             "published_at": article.published_at,
             "url": article.url,
-            "entities": json.dumps([
-                {
-                    "name": e.name,
-                    "symbol": e.symbol,
-                    "sentiment": e.sentiment,
-                    "industry": e.industry,
-                }
-                for e in article.entities
-            ]),
+            "entities": json.dumps(entities),
+            "entity_names": ", ".join(normalize_name(e["name"]) for e in entities),
+            "entity_symbols": ", ".join(e["symbol"] for e in entities),
         }
 
 class Candidate(TypedDict):

@@ -98,7 +98,7 @@ class DataPipeline:
         self.db.close()
 
         elapsed = time.time() - start_time
-        logger.info(f"Data pipeline finished in {int(elapsed // 60)}m {elapsed % 60}s")
+        logger.info(f"Data pipeline finished in {int(elapsed // 60):02d}m {elapsed % 60:05.2f}s")
 
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1,
          published_after: Optional[str] = None, published_before: Optional[str] = None, start_page: int = 1,

@@ -5,8 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 
-from backend.rag import BGEReranker
-from backend.rag import Embedder
+from backend.rag import BGEReranker, Embedder, EntityAndTickerExtractor
 from backend.utils import NewsDocument, Article, logger, Candidate
 
 
@@ -14,6 +13,7 @@ class ChromaMarketNews:
     def __init__(self, db_path: str = "embeddings"):
         self._setup_chroma(db_path)
         self.reranker = BGEReranker()
+        self.extractor = EntityAndTickerExtractor()
 
     def delete_article(self, article_id: str) -> None:
         results = self.collection.get(where={"article_id": {"$eq": article_id}})
@@ -87,8 +87,10 @@ class ChromaMarketNews:
             logger.error(f"Error during batch indexing: {e}")
             raise
 
-    def query(self, query_text: str, n_results: int = 50, filters: Optional[dict] = None,
-              contains_text: Optional[str] = None, top_n_rerank: int = 5, threshold: float = 0.75) -> List[Dict]:
+    def query(self, query_text: str, n_results: int = 50, contains_text: Optional[str] = None, top_n_rerank: int = 5,
+              threshold: float = 0.75) -> List[Dict]:
+
+        filters = self._build_filters(query_text)
 
         raw_results = self._execute_query(query_text, n_results, filters, contains_text)
         candidates = self._build_candidates(raw_results)
@@ -102,6 +104,24 @@ class ChromaMarketNews:
 
         final_results = self._rerank_candidates(query_text, recent_candidates, top_n_rerank, threshold)
         return final_results
+
+    def _build_filters(self, query_text: str) -> Optional[Dict]:
+        companies, tickers = self.extractor.extract_all(query_text)
+
+        if not companies and not tickers:
+            return None
+
+        conditions = []
+        if companies:
+            conditions.append({"entity_names": {"$in": companies}})
+        if tickers:
+            conditions.append({"entity_symbols": {"$in": tickers}})
+
+        if len(conditions) == 1:
+            return conditions[0]
+
+        if len(conditions) > 1:
+            return {"$or": conditions}
 
     def _execute_query(self, query_text: str, n_results: int,
                        filters: Optional[dict], contains_text: Optional[str]) -> Dict:

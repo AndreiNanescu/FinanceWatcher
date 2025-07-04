@@ -19,7 +19,8 @@ def normalize_name(name: str) -> str:
     name = name.lower()
 
     name = re.sub(r'[^\w\s]', '', name)
-    suffixes = [' corporation', ' corp', ' incorporated', ' inc', ' ltd', ' limited', ' co']
+    suffixes = [' corporation', ' corp', ' incorporated', ' inc', ' ltd', ' limited', ' co',
+                ' group', ' llc', ' company', ' technologies', ' services', ' ai', 'com']
     for suffix in suffixes:
         if name.endswith(suffix):
             name = name[:-len(suffix)]
