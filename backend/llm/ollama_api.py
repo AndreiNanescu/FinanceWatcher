@@ -5,11 +5,11 @@ from datetime import datetime
 from textwrap import dedent
 from typing import List, Dict
 
-from backend.data import ChromaMarketNews
+from backend.data import ChromaClient
 
 
 class Llama3:
-    def __init__(self, chroma: ChromaMarketNews = None):
+    def __init__(self, chroma: ChromaClient = None):
         self.chroma = chroma
         self._url_pattern = re.compile(r'\n?URL: .+\n?')
         self._published_on_pattern = re.compile(r'Published on:.*(?:\n|$)', flags=re.IGNORECASE)

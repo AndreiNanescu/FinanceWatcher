@@ -1,1 +1,1 @@
-from .scraper import ArticleScraper
+from .scraper_good import ArticleScraper

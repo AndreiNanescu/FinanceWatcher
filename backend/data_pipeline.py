@@ -4,7 +4,7 @@ import time
 from dotenv import load_dotenv
 from typing import List, Optional
 
-from backend.data import MarketNewsDB, ChromaMarketNews
+from backend.data import MarketNewsDB, ChromaClient, Indexer
 from backend.data.gatherers import MarketAuxGatherer
 from backend.utils import logger, log_args
 
@@ -60,7 +60,7 @@ class DataPipeline:
     def __init__(self, days: int = 1, max_pages: int = 1,
                  published_after: Optional[str] = None, published_before: Optional[str] = None, start_page: int = 1,
                  gatherer: Optional[MarketAuxGatherer] = None, db: Optional[MarketNewsDB] = None,
-                 chroma: Optional[ChromaMarketNews] = None):
+                 chroma_client: Optional[ChromaClient] = None, indexer: Optional[Indexer] = None):
 
         self.days = days
         self.published_after = published_after
@@ -70,7 +70,7 @@ class DataPipeline:
 
         self.gatherer = gatherer
         self.db = db
-        self.chroma = chroma
+        self.indexer = indexer
 
         self._sync_gatherer_to_db()
 
@@ -94,7 +94,7 @@ class DataPipeline:
         self.db.add(articles=articles)
         self.db.add_to_blacklist(urls=blacklist)
 
-        self.chroma.index(articles=articles)
+        self.indexer.ingest(articles=articles)
         self.db.close()
 
         elapsed = time.time() - start_time
@@ -103,7 +103,7 @@ class DataPipeline:
 def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: int = 1,
          published_after: Optional[str] = None, published_before: Optional[str] = None, start_page: int = 1,
          gatherer: Optional[MarketAuxGatherer] = None, db: Optional[MarketNewsDB] = None,
-         chroma: Optional[ChromaMarketNews] = None) -> None:
+         chroma_client: Optional[ChromaClient] = None, indexer: Optional[Indexer] = None) -> None:
 
     log_args({
         "symbols": symbols,
@@ -118,9 +118,11 @@ def main(symbols: List[str], days: int = 1, save_data: bool = False, max_pages: 
     try:
         gatherer = gatherer if gatherer is not None else MarketAuxGatherer(symbols=symbols, save_data=save_data)
         db = db if db is not None else MarketNewsDB()
-        chroma = chroma if chroma is not None else ChromaMarketNews()
+        chroma_client = chroma_client if chroma_client is not None else ChromaClient()
+        indexer = indexer if indexer is not None else Indexer(chroma_client=chroma_client)
 
-        pipeline = DataPipeline(gatherer=gatherer, db=db, chroma=chroma, days=days, max_pages=max_pages,
+
+        pipeline = DataPipeline(gatherer=gatherer, db=db, chroma_client=chroma_client, indexer=indexer, days=days, max_pages=max_pages,
                                 published_after=published_after, published_before=published_before)
         pipeline.process()
 

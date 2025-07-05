@@ -1,2 +1,2 @@
-from .chroma import ChromaMarketNews
+from .chroma import ChromaClient, Indexer, Querier
 from .sqlite import MarketNewsDB

@@ -3,13 +3,13 @@ import threading
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from backend.llm import Llama3
-from backend.data import ChromaMarketNews
+from backend.data import ChromaClient
 from .data_pipeline import main as pipeline
 
 app = Flask(__name__)
 CORS(app)
 
-chroma = ChromaMarketNews()
+chroma = ChromaClient()
 llm = Llama3(chroma)
 
 is_updating = False
