@@ -192,7 +192,7 @@ class MarketAuxGatherer(DataGatherer):
 
     def _fetch_by_days(self, days: int, max_pages: int, start_page: int) -> List[dict]:
         all_data = []
-        for day_delta in tqdm(range(days), desc="Fetching data by days"):
+        for day_delta in range(days):
             date_str = (datetime.utcnow() - timedelta(days=day_delta)).strftime("%Y-%m-%d") if days > 1 else None
             for page in range(start_page, start_page + max_pages):
                 try:
@@ -216,7 +216,7 @@ class MarketAuxGatherer(DataGatherer):
     def _fetch_by_date_range(self, published_after: Optional[str], published_before: Optional[str], max_pages: int,
                              start_page: int) -> List[dict]:
         all_data = []
-        for page in tqdm(range(start_page, start_page + max_pages), desc="Fetching data by pages"):
+        for page in range(start_page, start_page + max_pages):
             try:
                 data = self._request_data(
                     published_after=published_after,
