@@ -5,24 +5,17 @@ from datetime import datetime
 from textwrap import dedent
 from typing import List, Dict
 
-from backend.data import ChromaMarketNews
+from backend.data import Querier
 
 
 class Llama3:
-    def __init__(self, chroma: ChromaMarketNews = None):
-        self.chroma = chroma
-        self._url_pattern = re.compile(r'\n?URL: .+\n?')
-        self._published_on_pattern = re.compile(r'Published on:.*(?:\n|$)', flags=re.IGNORECASE)
-        self._description_pattern = re.compile(r'Description:\s*(.+?)(?:\n\s*\n|$)', re.DOTALL | re.IGNORECASE)
+    def __init__(self, querier: Querier = None):
+        self.querier = querier
 
     def _clean_document(self, raw_doc: str) -> str:
-        doc = self._url_pattern.sub('\n', raw_doc)
-        doc = self._published_on_pattern.sub('', doc).strip()
-        return doc
+        doc = re.sub(r'^Keywords present:.*(?:\n|$)', '', raw_doc, flags=re.MULTILINE)
 
-    def _extract_description(self, cleaned_doc: str) -> str:
-        match = self._description_pattern.search(cleaned_doc)
-        return match.group(1).strip() if match else "No description available."
+        return doc.strip()
 
     def _build_context(self, news_items: List[Dict]) -> str:
         if not news_items:
@@ -34,7 +27,6 @@ class Llama3:
             meta = item.get("metadata", {})
 
             cleaned_doc = self._clean_document(raw_doc)
-            description = self._extract_description(cleaned_doc)
 
             title = meta.get("title", "Untitled").strip()
             entity = meta.get("entity", "Unknown entity").strip()
@@ -52,7 +44,7 @@ class Llama3:
 
             lines.append(
                 f"- ({date}) Title: {title}\n"
-                f"  Description: {description}\n"
+                f"  Description: {cleaned_doc}\n"
                 f"  Mentioned Entity: {entity_str}\n"
                 f"  Sentiment: {sentiment}\n"
                 f"  Industry: {industry}\n"
@@ -99,8 +91,14 @@ class Llama3:
         ]
 
     def ask(self, question: str) -> str:
-        news = self.chroma.query(query_text=question, top_n_rerank=10)
-        context = self._build_context(news)
+        sub_queries = self.split_query(question)
+        all_news = []
+
+        for sub in sub_queries:
+            news = self.querier.search(query_text=sub)
+            all_news.extend(news)
+
+        context = self._build_context(all_news)
         messages = self._build_prompt(context, question)
         response = ollama.chat(model='llama3', messages=messages)
         return response.message.content
@@ -181,3 +179,36 @@ class Llama3:
 
         response = ollama.chat(model='llama3', messages=messages)
         return response.message.content.strip()
+
+    def split_query(self, question: str) -> List[str]:
+        system_message = dedent("""
+            You are an intelligent query simplifier for a financial assistant AI.
+
+            Your task is to split a user’s compound financial query into multiple simple sub-queries.
+
+            Instructions:
+            - Return each sub-query as a short and clear sentence.
+            - Sub-queries should focus on a single entity or topic.
+            - Only include relevant parts: remove unnecessary filler or fluff.
+            - Respond ONLY with a list of strings, no explanation or formatting.
+
+            Example:
+
+            Input:
+            Give me the latest BLK earnings, aapl news, microsoft ai related news and amazon earnings.
+
+            Output:
+            ["BLK earnings", "AAPL news", "Microsoft AI news", "Amazon earnings"]
+        """)
+
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": question}
+        ]
+
+        response = ollama.chat(model='llama3', messages=messages)
+
+        try:
+            return eval(response.message.content.strip())  # Safe-ish because we control the prompt
+        except Exception:
+            return [question.strip()]
