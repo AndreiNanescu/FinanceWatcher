@@ -20,9 +20,10 @@ class Querier:
     def search(self, query_text: str, n_results: int = 50, contains_text: Optional[str] = None, top_n_rerank: int = 5,
               threshold: float = 0.75) -> List[Dict]:
 
-        filters = self._build_filters(query_text)
+        #filters = self._build_filters(query_text)
 
-        raw_results = self._execute_query(query_text, n_results, filters, contains_text)
+        raw_results = self._execute_query(query_text=query_text, n_results=n_results, filters=None,
+                                          contains_text=contains_text)
         candidates = self._build_candidates(raw_results)
 
         if not candidates:

@@ -5,7 +5,7 @@ from keybert import KeyBERT
 from sentence_transformers import SentenceTransformer
 from typing import Dict, List
 
-from backend.llm import Llama3
+from backend.models import Llama3
 
 
 class ArticleSummarizer:

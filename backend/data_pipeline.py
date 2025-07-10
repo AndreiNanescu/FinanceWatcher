@@ -8,7 +8,6 @@ from backend.data import MarketNewsDB, ChromaClient, Indexer
 from backend.data.gatherers import MarketAuxGatherer
 from backend.utils import logger, log_args
 
-
 load_dotenv()
 
 
