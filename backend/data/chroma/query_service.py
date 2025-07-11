@@ -1,28 +1,28 @@
+import re
+
 from datetime import datetime, timedelta
 
 from typing import List, Dict, Optional
 
 from .chroma_client import ChromaClient
-from backend.rag import BGEReranker, EntityAndTickerExtractor
+from backend.rag import BGEReranker
 from backend.utils import logger, Candidate
 
 
 class Querier:
-    def __init__(self, chroma_client: ChromaClient, reranker: BGEReranker, extractor: EntityAndTickerExtractor):
+    def __init__(self, chroma_client: ChromaClient, reranker: BGEReranker):
         if chroma_client is None:
             raise ValueError(f"chroma_client parameter cannot be None in Querier")
 
         self.reranker = reranker
-        self.extractor = extractor
         self.client = chroma_client
-        logger.info('Querier initialized')
 
     def search(self, query_text: str, n_results: int = 50, contains_text: Optional[str] = None, top_n_rerank: int = 5,
               threshold: float = 0.75) -> List[Dict]:
 
-        #filters = self._build_filters(query_text)
-
-        raw_results = self._execute_query(query_text=query_text, n_results=n_results, filters=None,
+        filters = self._build_filters(query_text)
+        logger.info(f'Filters {filters}')
+        raw_results = self._execute_query(query_text=query_text, n_results=n_results, filters=filters,
                                           contains_text=contains_text)
         candidates = self._build_candidates(raw_results)
 
@@ -45,15 +45,20 @@ class Querier:
             where_document={"$contains": contains_text} if contains_text else None
         )
 
-    def _build_filters(self, query_text: str) -> Optional[Dict]:
-        companies, tickers = self.extractor.extract_all(query_text)
+    @staticmethod
+    def _extract_ticker(query_text: str) -> Optional[List[str]]:
+        result = re.findall(r'\(([^)]+)\)', query_text)
+        if result:
+            return result
+        return None
 
-        if not companies and not tickers:
+    def _build_filters(self, query_text: str) -> Optional[Dict]:
+        tickers = self._extract_ticker(query_text)
+
+        if not tickers:
             return None
 
         conditions = []
-        if companies:
-            conditions.append({"entity_names": {"$in": companies}})
         if tickers:
             conditions.append({"entity_symbols": {"$in": tickers}})
 
