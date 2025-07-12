@@ -5,10 +5,11 @@ from llama_index.llms.ollama import Ollama
 
 from backend.utils import SYSTEM_PROMPT
 
+
 class Agent:
     def __init__(self):
         self.mcp_client = BasicMCPClient("http://127.0.0.1:8000/sse", timeout=60)
-        self.llm = Ollama(model='llama3.2:3b', request_timeout=300.0)
+        self.llm = Ollama(model='llama3.1:8b', request_timeout=300.0)
 
         self.agent = None
         self.context = None
