@@ -5,8 +5,6 @@ from backend.data import Querier
 
 
 class Llama3:
-    def __init__(self, querier: Querier = None):
-        self.querier = querier
 
     @staticmethod
     def summarize(article_text: str) -> str:
