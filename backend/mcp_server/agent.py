@@ -25,17 +25,9 @@ class Agent:
         )
         self.context = Context(self.agent)
 
-    async def ask(self, message: str, verbose: bool = True):
-        handler = self.agent.run(message, ctx=self.context)
-
-        async for event in handler.stream_events():
-            if verbose and type(event) == ToolCall:
-                print(f"Calling tool {event.tool_name} with kwargs {event.tool_kwargs}")
-            if verbose and type(event) == ToolCallResult:
-                print(f'Tool {event.tool_name} returned {event.tool_output}')
-
-        response = await handler
+    async def ask(self, message: str):
+        response = await self.agent.run(message, ctx=self.context)
         return str(response)
 
-    async def __call__(self, message: str, verbose: bool = True):
-        return await self.ask(message=message, verbose=verbose)
+    async def __call__(self, message: str):
+        return await self.ask(message=message)

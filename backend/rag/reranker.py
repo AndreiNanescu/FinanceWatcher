@@ -7,21 +7,27 @@ from backend.utils import logger
 
 
 class BGEReranker:
-    def __init__(self, model_name: str = "BAAI/bge-reranker-base", device: str = None):
+    def __init__(self, model_name: str = "BAAI/bge-reranker-base", device: str = None, verbose: bool = False):
         self.model_name = model_name
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = None
         self.model = None
-        logger.info("BGEReranker initialized but model/tokenizer not loaded yet")
+        self.verbose = verbose
+
+        if self.verbose:
+            logger.info("BGEReranker initialized but model/tokenizer not loaded yet")
 
     def _load_model(self):
         if self.tokenizer is None or self.model is None:
-            logger.info(f"Loading model '{self.model_name}' on {self.device}...")
+            if self.verbose:
+                logger.info(f"Loading model '{self.model_name}' on {self.device}...")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
             self.model.to(self.device)
             self.model.eval()
-            logger.info("BGEReranker loaded and ready")
+
+            if self.verbose:
+                logger.info("BGEReranker loaded and ready")
 
     def rerank(self, query: str, passages: List[str], top_k: int = 5) -> List[Tuple[str, float]]:
         self._load_model()
