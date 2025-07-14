@@ -3,28 +3,35 @@ name = "backend"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = "==3.12.9"
 dependencies = [
     "chromadb==1.0.13",
+    "compressed-tensors>=0.10.2",
     "fake-useragent>=2.2.0",
     "flask>=3.1.1",
     "flask-cors>=6.0.1",
+    "huggingface-hub[hf-xet]>=0.33.3",
     "keybert>=0.9.0",
     "llama-index>=0.12.48",
+    "llama-index-llms-huggingface>=0.5.0",
     "llama-index-llms-ollama>=0.6.2",
+    "llama-index-llms-vllm>=0.5.1",
     "llama-index-tools-mcp>=0.2.6",
+    "lxml[html-clean]>=6.0.0",
     "mcp[cli]>=1.10.1",
     "newspaper3k>=0.2.8",
+    "numpy==2.2.6",
     "ollama~=0.5.1",
     "pandas~=2.3.0",
     "playwright>=1.53.0",
     "pydantic~=2.11.7",
     "python-dotenv~=1.1.0",
+    "rapidfuzz>=3.13.0",
     "requests~=2.32.4",
     "sentence-transformers~=4.1.0",
-    "torch>=2.7.1",
-    "torchaudio>=2.7.1",
-    "torchvision>=0.22.1",
+    "torch>=2.6.0",
+    "torchaudio==2.6.0",
+    "torchvision==0.21.0",
     "tqdm~=4.67.1",
     "transformers~=4.52.4",
     "yfinance>=0.2.65",
@@ -36,3 +43,6 @@ default = true
 
 [[tool.uv.index]]
 url = "https://packagecloud.io/jerryjliu/chromadb/pypi/simple"
+
+[[tool.uv.index]]
+url = "https://download.pytorch.org/whl/cu124"

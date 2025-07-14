@@ -1,5 +1,6 @@
 import argparse
 import time
+import warnings
 
 from dotenv import load_dotenv
 from typing import List, Optional
@@ -9,7 +10,7 @@ from backend.data.gatherers import MarketAuxGatherer
 from backend.utils import logger, log_args
 
 load_dotenv()
-
+warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run data pipeline")
