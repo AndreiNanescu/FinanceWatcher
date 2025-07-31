@@ -1,4 +1,4 @@
-# 📈 FinanceWatcher
+# FinanceWatcher ![logo](./frontend/public/logo.png)
 
 **Track the sentiment. Measure the impact. Understand the markets.**
 
@@ -6,42 +6,37 @@ FinanceWatcher is an AI-powered utility that analyzes financial news and social 
 
 ---
 
-## 🚀 Features
+## Features
 
-- 🔍 **News Ingestion & Embedding**  
-  Ingest financial news and tweets, generate vector embeddings using Ollama models, and store metadata-rich entries in a ChromaDB vector store.
+-  **News Ingestion & Embedding**  
+  Ingest financial news, generate vector embeddings using *BAAI/bge-m3*, and store metadata-rich entries in a ChromaDB vector store.
 
-- 🧠 **Sentiment Analysis**  
-  Run sentiment classification on financial news using LLM-backed or custom scoring.
+- **Sentiment Analysis**  
+  Extract sentiment scoring provided by the MarketAux API.
 
-- 📊 **Impact Measurement**  
-  Quantify how a stock's price changed in the 1-hour window before and after each news item.
+- **Impact Measurement**  
+  Quantify how a stock's price changed due to the news article.
 
-- 🧩 **Model Context Protocol (MCP) Tools**  
-  Structured tools to let the LLM retrieve sentiment trends, calculate impact, and summarize insights.
+-  **Model Context Protocol (MCP) Tools**  
+  Structured tools to let the LLM retrieve sentiment trends, calculate impact, price trends and current price.
 
-- 🔎 **RAG-Powered Q&A**  
-  Use embeddings + metadata for context-aware LLM interactions — explore recent market-moving news by company or sentiment.
+-  **RAG-Powered Q&A**  
+  Use embeddings + metadata for context-aware LLM interactions — explore recent news with a smart query system that is semnatically aware of the company and other keywords, **eg: 'BLK earnings', "Microsoft AI news" etc.**
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
-| Layer        | Tools Used                          |
-|--------------|-------------------------------------|
-| Backend      | Flask, Python                       |
-| LLM / Embedding | Huggingface (open-source models)    |
-| Vector DB    | ChromaDB                            |
-| MCP Tools    | Anthropic Python SDK (MCP protocol) |
-| Data         | Financial news APIs / Twitter API   |
-| Frontend     | Planned (React or simple Flask UI)  |
-
-
-## 📈 Use Cases
-
-- "Show me recent news with the strongest negative sentiment for $TSLA"
-- "How did Apple’s stock move after the last major headline?"
-- "What's the sentiment trend for NVIDIA over the past week?"
+| Layer | Tools Used                          |
+|------|-------------------------------------|
+| Backend | Flask, Python                       |
+| Embedding | BAAI/bge-m3                         |
+| Reranker | BGEReranker |
+| LLM  | LLama3                              |
+| Vector DB | ChromaDB                            |
+| MCP Tools | Anthropic Python SDK (MCP protocol) |
+| Data | MarketAux API                       |
+| Frontend | React                               |
 
 ---
 
@@ -51,16 +46,14 @@ FinanceWatcher is an AI-powered utility that analyzes financial news and social 
 - [x] Integrate Huggingface embeddings
 - [x] Implement sentiment scoring
 - [ ] Calculate price-based impact scores
-- [ ] Create core MCP tools
+- [x] Create core MCP tools
 - [x] Add basic RAG query flow
-- [ ] Build frontend dashboard (optional)
+- [x] Build frontend dashboard
 
 ---
 
-## 👤 Author
+## Author
 
 FinanceWatcher by [Andrei Nanescu]
 
----
 
-*Initial README draft assisted by ChatGPT.*
