@@ -36,6 +36,8 @@ def _run_news_query(query: str, symbols: str | None) -> str:
     logger.info(f"Called query_chroma with query: {query!r}, symbols: {tickers}")
     docs = query_service.search(query, tickers=tickers)
 
+    logger.info(f"query_chroma returning {len(docs)} article(s) to the model for query={query!r} symbols={tickers}")
+
     if not docs:
         return "No relevant news found."
 
@@ -80,31 +82,31 @@ async def query_chroma(query: str, symbols: str = "") -> str:
     return await asyncio.to_thread(_run_news_query, query, symbols)
 
 
-def _fetch_price_sync(symbol: str, start_date: str, end_date: str) -> dict:
-    logger.info(f"Called fetch_price with symbol: {symbol}, start_date: {start_date}, end_date: {end_date}")
+_MAX_PRICE_DAYS = 365
+
+
+def _fetch_price_sync(symbol: str, days: int) -> dict:
     try:
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-    except ValueError:
-        raise ValueError("start_date and end_date must be in YYYY-MM-DD format") from None
+        days = int(days)
+    except (TypeError, ValueError):
+        days = 30
+    days = max(1, min(days, _MAX_PRICE_DAYS))
 
-    if (end_dt - start_dt).days > 90:
-        logger.info("Date range exceeded 90 days; clipping to most recent 90 days.")
-        end_dt = datetime.utcnow()
-        start_dt = end_dt - timedelta(days=90)
+    end_dt = datetime.utcnow()
+    start_dt = end_dt - timedelta(days=days)
+    start_date = start_dt.strftime("%Y-%m-%d")
+    end_date = end_dt.strftime("%Y-%m-%d")
+    logger.info(f"Called fetch_price with symbol: {symbol}, days: {days} ({start_date} → {end_date})")
 
-        start_date = start_dt.strftime("%Y-%m-%d")
-        end_date = end_dt.strftime("%Y-%m-%d")
-
-    # Range is capped at 90 days above, so daily bars stay manageable while
-    # preserving granularity.
-    interval = "1d"
+    # Daily bars for shorter windows keep full granularity; weekly bars for long
+    # ranges keep the payload manageable without losing the overall trend.
+    interval = "1d" if days <= 90 else "1wk"
 
     ticker = yf.Ticker(symbol)
     df = ticker.history(interval=interval, start=start_date, end=end_date)
 
     if df.empty:
-        raise ValueError(f"No data found for {symbol} between {start_date} and {end_date}.")
+        raise ValueError(f"No data found for {symbol} in the last {days} days.")
 
     df.index = df.index.strftime("%Y-%m-%d")
     df = df[["Open", "High", "Low", "Close", "Volume"]]
@@ -115,22 +117,26 @@ def _fetch_price_sync(symbol: str, start_date: str, end_date: str) -> dict:
 @mcp.tool(
     name="fetch_price",
     description=(
-        "Fetches historical OHLCV price data for a given stock symbol over a specified date range and interval. "
-        "Returns a JSON-like dict mapping dates to price details. DO NOT exceed 90 days when specifying date ranges"
+        "Fetches historical OHLCV price data for a stock symbol over the most recent `days` days "
+        "(from today backwards). Choose `days` from the question's time horizon: ~7 for a week, "
+        "~30 for a month, ~90 for a quarter, up to 365 for a year (default 30). Returns a dict "
+        "mapping each trading date to its open/high/low/close/volume. IMPORTANT: the data covers "
+        "ONLY this recent window — it does not contain 52-week highs/lows, year-to-date returns, "
+        "all-time highs, or market capitalization."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
         openWorldHint=True,
     ),
 )
-async def fetch_price(symbol: str, start_date: str, end_date: str) -> dict:
+async def fetch_price(symbol: str, days: int = 30) -> dict:
     """
-    Fetch historical price data for a stock.
+    Fetch recent historical price data for a stock.
 
     Args:
         symbol (str): Stock ticker (e.g., "AAPL").
-        start_date (str): Inclusive start date in YYYY-MM-DD.
-        end_date (str): Exclusive end date in YYYY-MM-DD.
+        days (int): How many days of recent history to fetch, from today
+            backwards. Clamped to 1..365. Daily bars up to 90 days, weekly beyond.
 
     Returns:
         dict:
@@ -139,9 +145,9 @@ async def fetch_price(symbol: str, start_date: str, end_date: str) -> dict:
              "Close": float, "Volume": int}
 
     Raises:
-        ValueError: If no data returned or invalid date range.
+        ValueError: If no data is returned for the symbol.
     """
-    return await asyncio.to_thread(_fetch_price_sync, symbol, start_date, end_date)
+    return await asyncio.to_thread(_fetch_price_sync, symbol, days)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import asyncio
-from datetime import datetime, timedelta
+import json
+import re
 from typing import TYPE_CHECKING, Annotated, TypedDict
 
 import yfinance as yf
@@ -20,6 +21,7 @@ from .prompts import PLANNER_SYSTEM_PROMPT, SYNTHESIS_SYSTEM_PROMPT
 
 _MAX_COMPANIES = 4
 _PRICE_LOOKBACK_DAYS = 30
+_MAX_PRICE_DAYS = 365
 _HISTORY_TURNS = 6
 
 _NEWS_TIMEOUT = 60
@@ -38,13 +40,91 @@ class Plan(BaseModel):
     companies: list[Company] = Field(default_factory=list)
     needs_news: bool = True
     needs_price: bool = False
+    price_days: int = Field(
+        default=_PRICE_LOOKBACK_DAYS,
+        description=(
+            "Days of recent daily price history to fetch, chosen from the "
+            "question's time horizon (7=week, 30=month, 90=quarter, up to 365=year)."
+        ),
+    )
 
 
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     plan: Plan | None
-    news_blocks: list[str]
-    price_blocks: list[str]
+    # One combined block per company (news + price summary together) so the
+    # model integrates them instead of treating news and price as separate dumps.
+    sections: list[str]
+
+
+# Sentinel the news tool returns when nothing relevant is found (see
+# mcp_server/server.py::_run_news_query).
+_NO_NEWS_SENTINEL = "no relevant news found"
+
+
+def _is_no_news(result: str) -> bool:
+    return _NO_NEWS_SENTINEL in result.strip().lower()
+
+
+def _summarize_prices(label: str, days: int, raw) -> str:
+    """Turn raw OHLCV (dict or JSON string) into a compact, pre-computed summary.
+
+    The synthesis model is small and tends to drown in (and miscompute from) a
+    raw table of daily bars. Computing the few figures that matter here in Python
+    gives it correct numbers in one short sentence so it can focus on the news.
+    """
+    try:
+        data = raw if isinstance(raw, dict) else json.loads(str(raw))
+        if not isinstance(data, dict) or not data:
+            raise ValueError("empty or non-dict price data")
+    except Exception:
+        # Couldn't parse — pass the raw payload through rather than lose the data.
+        return f"Price for {label} (last {days} days): {raw}"
+
+    rows = sorted(data.items())  # ISO date strings sort chronologically
+    first_date, first = rows[0]
+    last_date, last = rows[-1]
+
+    closes = [v["Close"] for _, v in rows if v.get("Close") is not None]
+    highs = [v["High"] for _, v in rows if v.get("High") is not None]
+    lows = [v["Low"] for _, v in rows if v.get("Low") is not None]
+    vols = [v["Volume"] for _, v in rows if v.get("Volume") is not None]
+
+    if not closes:
+        return f"Price for {label} (last {days} days): {raw}"
+
+    first_close, last_close = closes[0], closes[-1]
+    pct = ((last_close - first_close) / first_close * 100) if first_close else 0.0
+    direction = "up" if pct > 0 else "down" if pct < 0 else "flat"
+    period_high = max(highs) if highs else max(closes)
+    period_low = min(lows) if lows else min(closes)
+    avg_vol = sum(vols) / len(vols) if vols else 0
+
+    return (
+        f"Price summary for {label} over the last {days} days "
+        f"({len(rows)} trading days, {first_date} to {last_date}): "
+        f"closed at {last_close:.2f} on {last_date} versus {first_close:.2f} on {first_date}, "
+        f"{direction} {abs(pct):.1f}% over the window. "
+        f"Intraday range over the period was {period_low:.2f} to {period_high:.2f}. "
+        f"Average daily volume was about {avg_vol:,.0f} shares. "
+        f"(These are the only price facts available — there is no year-to-date, "
+        f"52-week, or market-cap data.)"
+    )
+
+
+def _strip_markdown(text: str) -> str:
+    """Safety net: enforce the prose style the prompt asks for even when the
+    model slips into headings/bullets/bold despite the instructions."""
+    cleaned_lines = []
+    for line in text.split("\n"):
+        line = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)  # markdown headings
+        line = re.sub(r"^\s*[\*\-•]\s+", "", line)  # bullet markers
+        cleaned_lines.append(line)
+    out = "\n".join(cleaned_lines)
+    out = out.replace("**", "").replace("__", "")  # bold markers
+    # Collapse 3+ blank lines that de-bulleting may leave behind.
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
 
 
 def _latest_user_question(messages: list) -> str:
@@ -153,15 +233,13 @@ def build_graph(
         plan = state["plan"] or Plan()
         question = _latest_user_question(state["messages"])
 
-        end_dt = datetime.now()
-        start_dt = end_dt - timedelta(days=_PRICE_LOOKBACK_DAYS)
-        start_date = start_dt.strftime("%Y-%m-%d")
-        end_date = end_dt.strftime("%Y-%m-%d")
+        # The planner picks the window from the question's time horizon; clamp to
+        # the tool's supported range so a bad value can't break the call.
+        price_days = max(1, min(plan.price_days or _PRICE_LOOKBACK_DAYS, _MAX_PRICE_DAYS))
 
         targets = plan.companies or ([] if not plan.needs_news else [None])
 
-        async def fetch_news(company) -> tuple[str, str]:
-            label = f"{company.name} ({company.ticker})" if company else question
+        async def get_news(company, label: str) -> str:
             query = f"{company.name} ({company.ticker})" if company else question
             symbols = company.ticker if company else ""
             try:
@@ -169,67 +247,68 @@ def build_graph(
                     chroma_tool.ainvoke({"query": query, "symbols": symbols}),
                     timeout=_NEWS_TIMEOUT,
                 )
-                return "news", f"News for {label}:\n{result}"
             except TimeoutError:
-                return "news", f"News retrieval timed out for {label}."
+                return f"News: retrieval timed out for {label}."
             except Exception as exc:
-                return "news", f"News retrieval failed for {label}: {exc}"
+                return f"News: retrieval failed for {label}: {exc}"
 
-        async def fetch_price(company) -> tuple[str, str]:
-            label = f"{company.name} ({company.ticker})"
+            # Make an empty result impossible to dress up: emit a blunt, explicit
+            # marker the synthesis model must surface verbatim instead of padding
+            # with generic commentary.
+            if not result or not str(result).strip() or _is_no_news(str(result)):
+                return (
+                    f"News: NO NEWS AVAILABLE for {label}. No recent news articles were found. "
+                    f"Do not invent, infer, or speculate about any news for this company — "
+                    f"state plainly that no recent news was available and rely on its price data."
+                )
+            return f"News for {label}:\n{result}"
+
+        async def get_price(company, label: str) -> str:
             if not await _ticker_matches_company(company.name, company.ticker):
-                return "price", (
-                    f"Price data for {label} was not retrieved: the ticker "
-                    f"'{company.ticker}' does not appear to belong to {company.name}, "
-                    f"so potentially incorrect price data was withheld."
+                return (
+                    f"Price: not retrieved — the ticker '{company.ticker}' does not appear to "
+                    f"belong to {company.name}, so potentially incorrect price data was withheld."
                 )
             try:
                 result = await asyncio.wait_for(
-                    yfinance_tool.ainvoke(
-                        {
-                            "symbol": company.ticker,
-                            "start_date": start_date,
-                            "end_date": end_date,
-                        }
-                    ),
+                    yfinance_tool.ainvoke({"symbol": company.ticker, "days": price_days}),
                     timeout=_PRICE_TIMEOUT,
                 )
-                return "price", f"Price data for {label} ({start_date} → {end_date}):\n{result}"
             except TimeoutError:
-                return "price", f"Price retrieval timed out for {label}."
+                return f"Price: retrieval timed out for {label}."
             except Exception as exc:
-                return "price", f"Price retrieval failed for {label}: {exc}"
+                return f"Price: retrieval failed for {label}: {exc}"
+            return _summarize_prices(label, price_days, result)
 
-        tasks = []
-        for company in targets:
+        async def gather_company(company) -> str:
+            label = f"{company.name} ({company.ticker})" if company else question
+            subtasks = []
             if plan.needs_news and chroma_tool is not None:
-                tasks.append(fetch_news(company))
+                subtasks.append(get_news(company, label))
             if plan.needs_price and yfinance_tool is not None and company is not None:
-                tasks.append(fetch_price(company))
+                subtasks.append(get_price(company, label))
+            parts = await asyncio.gather(*subtasks) if subtasks else []
+            header = f"Company: {label}" if company else f"Topic: {question}"
+            return header + "\n" + "\n\n".join(parts)
 
-        results = await asyncio.gather(*tasks) if tasks else []
-
-        news_blocks = [block for kind, block in results if kind == "news"]
-        price_blocks = [block for kind, block in results if kind == "price"]
-        return {"news_blocks": news_blocks, "price_blocks": price_blocks}
+        sections = await asyncio.gather(*[gather_company(c) for c in targets]) if targets else []
+        return {"sections": list(sections)}
 
     async def synthesis_node(state: AgentState) -> dict:
         question = _latest_user_question(state["messages"])
         history = _recent_history(state["messages"])
-        news_blocks = state.get("news_blocks") or []
-        price_blocks = state.get("price_blocks") or []
+        sections = state.get("sections") or []
 
-        context_parts = []
-        if news_blocks:
-            context_parts.append("=== RECENT NEWS ===\n" + "\n\n".join(news_blocks))
-        if price_blocks:
-            context_parts.append("=== PRICE DATA ===\n" + "\n\n".join(price_blocks))
-        context = "\n\n".join(context_parts) if context_parts else "No data was retrieved."
+        context = "\n\n".join(sections) if sections else "No data was retrieved."
 
         prompt = ""
         if history:
             prompt += f"Conversation so far:\n{history}\n\n"
-        prompt += f"User question:\n{question}\n\nRetrieved data:\n{context}\n\nWrite the analysis:"
+        prompt += (
+            f"User question:\n{question}\n\n"
+            f"Retrieved data (one block per company — weave each company's news and "
+            f"price together):\n{context}\n\nWrite the analysis:"
+        )
 
         response = await llm.ainvoke(
             [
@@ -238,7 +317,7 @@ def build_graph(
             ]
         )
 
-        content = (response.content or "").strip()
+        content = _strip_markdown((response.content or "").strip())
         if not content:
             content = (
                 "I couldn't find enough information to answer that confidently. "

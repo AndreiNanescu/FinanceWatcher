@@ -21,7 +21,8 @@ class Querier:
         n_results: int = 50,
         contains_text: str | None = None,
         top_n_rerank: int = 5,
-        threshold: float = 0.5,
+        threshold: float = 0.3,
+        min_floor: float = 0.1,
         tickers: list[str] | None = None,
     ) -> list[dict]:
 
@@ -45,7 +46,7 @@ class Querier:
         if not recent_candidates:
             return []
 
-        final_results = self._rerank_candidates(query_text, recent_candidates, top_n_rerank, threshold)
+        final_results = self._rerank_candidates(query_text, recent_candidates, top_n_rerank, threshold, min_floor)
         return final_results
 
     @staticmethod
@@ -104,29 +105,37 @@ class Querier:
                 filtered.append(c)
         return filtered
 
-    def _rerank_candidates(self, query_text: str, candidates: list[dict], top_n: int, threshold: float) -> list[dict]:
+    def _rerank_candidates(
+        self, query_text: str, candidates: list[dict], top_n: int, threshold: float, min_floor: float = 0.1
+    ) -> list[dict]:
         passages = [c["document"] for c in candidates]
         reranked = self.reranker.rerank(query_text, passages, top_k=top_n)
 
-        top_candidates = []
-        for passage, rerank_score in reranked:
-            if rerank_score >= threshold:
-                orig = next(c for c in candidates if c["document"] == passage)
-                top_candidates.append(
-                    {
-                        "document": passage,
-                        "metadata": orig["metadata"],
-                        "retriever_score": orig["score"],
-                        "reranker_score": rerank_score,
-                    }
-                )
+        def _to_result(passage: str, rerank_score: float) -> dict:
+            orig = next(c for c in candidates if c["document"] == passage)
+            return {
+                "document": passage,
+                "metadata": orig["metadata"],
+                "retriever_score": orig["score"],
+                "reranker_score": rerank_score,
+            }
 
-        if not top_candidates:
+        top_candidates = [_to_result(p, s) for p, s in reranked if s >= threshold]
+
+        # Floor-gated fallback: if nothing clears the confident threshold, keep
+        # the single best passage *only* if it still clears a low floor. Rerank
+        # scores are strongly bimodal — genuinely on-topic articles score well
+        # above the floor while co-tagged junk collapses near zero — so this
+        # rescues thin-but-real coverage without re-admitting off-topic matches.
+        if not top_candidates and reranked and reranked[0][1] >= min_floor:
             logger.info(
-                f"No passages cleared rerank threshold {threshold}; best score was {reranked[0][1]:.3f}"
-                if reranked
-                else "No passages to rerank"
+                f"No passage cleared threshold {threshold}; "
+                f"keeping best at {reranked[0][1]:.3f} (>= floor {min_floor})"
             )
+            top_candidates.append(_to_result(*reranked[0]))
+        elif not top_candidates:
+            best = f"{reranked[0][1]:.3f}" if reranked else "n/a"
+            logger.info(f"No passage cleared threshold {threshold} or floor {min_floor}; best was {best}")
 
         top_candidates.sort(key=lambda x: x["reranker_score"], reverse=True)
         return top_candidates
