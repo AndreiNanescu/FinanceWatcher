@@ -18,14 +18,28 @@ class ArticleSummarizer:
         self.llama3 = Llama3()
         self.max_input_tokens = max_input_tokens
 
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device or self._safe_device()
 
         if use_better_keybert_model:
-            sbert_model = SentenceTransformer("distilbert-base-nli-mean-tokens")
+            sbert_model = SentenceTransformer("distilbert-base-nli-mean-tokens", device=self.device)
             self.keyword_extractor = KeyBERT(model=sbert_model)
         else:
             self.keyword_extractor = KeyBERT()
 
+
+    @staticmethod
+    def _safe_device() -> str:
+        """Return 'cuda' only if this GPU's arch is in PyTorch's compiled arch list."""
+        if not torch.cuda.is_available():
+            return "cpu"
+        try:
+            major, minor = torch.cuda.get_device_capability(0)
+            supported = torch.cuda.get_arch_list()          # e.g. ['sm_50', ..., 'sm_90']
+            if f"sm_{major}{minor}" in supported:
+                return "cuda"
+        except Exception:
+            pass
+        return "cpu"
 
     def summarize(self, text: str) -> Dict[str, str]:
         if not text.strip():

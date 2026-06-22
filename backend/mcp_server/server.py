@@ -1,9 +1,9 @@
 import os
 import re
 import sys
-import yfinance as yf
 from datetime import datetime, timedelta
 
+import yfinance as yf
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 

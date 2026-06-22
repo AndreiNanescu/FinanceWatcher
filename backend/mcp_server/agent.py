@@ -1,33 +1,54 @@
-from llama_index.tools.mcp import BasicMCPClient, McpToolSpec
-from llama_index.core.agent.workflow import FunctionAgent, ToolCall, ToolCallResult
-from llama_index.core.workflow import Context
-from llama_index.llms.ollama import Ollama
+from langchain_core.messages import HumanMessage
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_ollama import ChatOllama
 
-from backend.utils import SYSTEM_PROMPT
+from .agents import build_graph
+
+_MCP_URL = "http://127.0.0.1:8000/sse"
+_MODEL = "llama3.1:8b"
 
 
 class Agent:
-    def __init__(self):
-        self.mcp_client = BasicMCPClient("http://127.0.0.1:8000/sse", timeout=60)
-        self.llm = Ollama(model='llama3.1:8b', request_timeout=300.0)
+    """
+    Multi-agent orchestrator backed by LangGraph.
 
-        self.agent = None
-        self.context = None
+    Graph topology
+    --------------
+    START → supervisor → chroma_agent ──┐
+                      ↘ yfinance_agent ─┴→ supervisor → … → END
 
-    async def initialize_tools(self):
-        mcp_tools = await McpToolSpec(client=self.mcp_client).to_tool_list_async()
-        self.agent = FunctionAgent(
-            name='FinanceWatcher Agent',
-            description='An agent that can work with the financial data',
-            tools=mcp_tools,
-            llm=self.llm,
-            system_prompt=SYSTEM_PROMPT,
+    The supervisor routes each turn to the appropriate specialist and
+    synthesises the final analyst report once all data is gathered.
+    """
+
+    def __init__(self) -> None:
+        self.llm = ChatOllama(model=_MODEL, num_predict=4096, temperature=0.0)
+        self._mcp_client: MultiServerMCPClient | None = None
+        self.graph = None
+
+    async def initialize_tools(self) -> None:
+        """Connect to the MCP server, load tools, and compile the graph."""
+        self._mcp_client = MultiServerMCPClient(
+            {"finance": {"url": _MCP_URL, "transport": "sse"}}
         )
-        self.context = Context(self.agent)
+        await self._mcp_client.__aenter__()
 
-    async def ask(self, message: str):
-        response = await self.agent.run(message, ctx=self.context)
-        return str(response)
+        tools = self._mcp_client.get_tools()
+        chroma_tools = [t for t in tools if t.name == "get_news_for_company_or_symbol"]
+        yfinance_tools = [t for t in tools if t.name == "fetch_price"]
 
-    async def __call__(self, message: str):
+        self.graph = build_graph(self.llm, chroma_tools, yfinance_tools)
+
+    async def ask(self, message: str) -> str:
+        result = await self.graph.ainvoke(
+            {"messages": [HumanMessage(content=message)]}
+        )
+        return result["messages"][-1].content
+
+    async def close(self) -> None:
+        """Gracefully close the MCP connection."""
+        if self._mcp_client is not None:
+            await self._mcp_client.__aexit__(None, None, None)
+
+    async def __call__(self, message: str) -> str:
         return await self.ask(message=message)

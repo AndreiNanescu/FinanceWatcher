@@ -49,7 +49,7 @@ class Llama3:
             {"role": "user", "content": user_message}
         ]
 
-        response = ollama.chat(model='llama3', messages=messages)
+        response = ollama.chat(model='llama3.1:8b', messages=messages)
         return response.message.content.strip()
     
     @staticmethod
@@ -81,5 +81,5 @@ class Llama3:
             {"role": "user", "content": user_message}
         ]
 
-        response = ollama.chat(model='llama3', messages=messages)
+        response = ollama.chat(model='llama3.1:8b', messages=messages)
         return response.message.content.strip()

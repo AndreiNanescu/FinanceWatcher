@@ -12,11 +12,10 @@ dependencies = [
     "flask-cors>=6.0.1",
     "huggingface-hub[hf-xet]>=0.33.3",
     "keybert>=0.9.0",
-    "llama-index>=0.12.48",
-    "llama-index-llms-huggingface>=0.5.0",
-    "llama-index-llms-ollama>=0.6.2",
-    "llama-index-llms-vllm>=0.5.1",
-    "llama-index-tools-mcp>=0.2.6",
+    "langchain-core>=0.3.0",
+    "langchain-mcp-adapters>=0.1.0",
+    "langchain-ollama>=0.3.0",
+    "langgraph>=0.3.0",
     "lxml[html-clean]>=6.0.0",
     "mcp[cli]>=1.10.1",
     "newspaper3k>=0.2.8",
@@ -41,8 +40,12 @@ dependencies = [
 url = "https://pypi.org/simple"
 default = true
 
-[[tool.uv.index]]
-url = "https://packagecloud.io/jerryjliu/chromadb/pypi/simple"
+[tool.uv.sources]
+torch = { index = "pytorch" }
+torchaudio = { index = "pytorch" }
+torchvision = { index = "pytorch" }
 
 [[tool.uv.index]]
+name = "pytorch"
 url = "https://download.pytorch.org/whl/cu124"
+explicit = true
