@@ -30,7 +30,7 @@ Important rules:
 """
 
 
-SYNTHESIS_SYSTEM_PROMPT = f"""\
+SYNTHESIS_SYSTEM_PROMPT = """\
 You are a knowledgeable financial analyst. You are given a user's question and
 data that was already retrieved for you (recent news and/or stock price data).
 Write a single, natural, conversational response in the style of a sharp analyst

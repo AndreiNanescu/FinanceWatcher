@@ -20,9 +20,7 @@ class Agent:
 
     async def initialize_tools(self) -> None:
         """Connect to the MCP server, load tools, and compile the graph."""
-        self._mcp_client = MultiServerMCPClient(
-            {"finance": {"url": _MCP_URL, "transport": "sse"}}
-        )
+        self._mcp_client = MultiServerMCPClient({"finance": {"url": _MCP_URL, "transport": "sse"}})
 
         tools = await self._mcp_client.get_tools()
         chroma_tools = [t for t in tools if t.name == "get_news_for_company_or_symbol"]

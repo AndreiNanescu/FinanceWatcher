@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
-from typing import Annotated, Optional, TypedDict
+from typing import TYPE_CHECKING, Annotated, TypedDict
 
 import yfinance as yf
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -11,7 +11,11 @@ from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
 
+if TYPE_CHECKING:
+    from langgraph.graph.state import CompiledStateGraph
+
 from backend.utils import logger, normalize_name
+
 from .prompts import PLANNER_SYSTEM_PROMPT, SYNTHESIS_SYSTEM_PROMPT
 
 _MAX_COMPANIES = 4
@@ -38,7 +42,7 @@ class Plan(BaseModel):
 
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
-    plan: Optional[Plan]
+    plan: Plan | None
     news_blocks: list[str]
     price_blocks: list[str]
 
@@ -75,7 +79,8 @@ async def _ticker_matches_company(name: str, ticker: str) -> bool:
     yfinance reports a clearly different company — which is the case we must
     never surface as "the price of X".
     """
-    def _lookup() -> Optional[str]:
+
+    def _lookup() -> str | None:
         try:
             info = yf.Ticker(ticker).info or {}
         except Exception:
@@ -130,21 +135,19 @@ def build_graph(
     async def planner_node(state: AgentState) -> dict:
         question = _latest_user_question(state["messages"])
         history = _recent_history(state["messages"])
-        user_content = (
-            f"Conversation so far:\n{history}\n\nCurrent question: {question}"
-            if history else question
-        )
+        user_content = f"Conversation so far:\n{history}\n\nCurrent question: {question}" if history else question
         try:
-            plan = await planner_llm.ainvoke([
-                SystemMessage(content=PLANNER_SYSTEM_PROMPT),
-                HumanMessage(content=user_content),
-            ])
+            plan = await planner_llm.ainvoke(
+                [
+                    SystemMessage(content=PLANNER_SYSTEM_PROMPT),
+                    HumanMessage(content=user_content),
+                ]
+            )
         except Exception:
             plan = Plan(companies=[], needs_news=True, needs_price=False)
 
         plan.companies = plan.companies[:_MAX_COMPANIES]
         return {"plan": plan}
-
 
     async def gather_node(state: AgentState) -> dict:
         plan = state["plan"] or Plan()
@@ -167,7 +170,7 @@ def build_graph(
                     timeout=_NEWS_TIMEOUT,
                 )
                 return "news", f"News for {label}:\n{result}"
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return "news", f"News retrieval timed out for {label}."
             except Exception as exc:
                 return "news", f"News retrieval failed for {label}: {exc}"
@@ -182,15 +185,17 @@ def build_graph(
                 )
             try:
                 result = await asyncio.wait_for(
-                    yfinance_tool.ainvoke({
-                        "symbol": company.ticker,
-                        "start_date": start_date,
-                        "end_date": end_date,
-                    }),
+                    yfinance_tool.ainvoke(
+                        {
+                            "symbol": company.ticker,
+                            "start_date": start_date,
+                            "end_date": end_date,
+                        }
+                    ),
                     timeout=_PRICE_TIMEOUT,
                 )
                 return "price", f"Price data for {label} ({start_date} → {end_date}):\n{result}"
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return "price", f"Price retrieval timed out for {label}."
             except Exception as exc:
                 return "price", f"Price retrieval failed for {label}: {exc}"
@@ -208,7 +213,6 @@ def build_graph(
         price_blocks = [block for kind, block in results if kind == "price"]
         return {"news_blocks": news_blocks, "price_blocks": price_blocks}
 
-
     async def synthesis_node(state: AgentState) -> dict:
         question = _latest_user_question(state["messages"])
         history = _recent_history(state["messages"])
@@ -225,16 +229,14 @@ def build_graph(
         prompt = ""
         if history:
             prompt += f"Conversation so far:\n{history}\n\n"
-        prompt += (
-            f"User question:\n{question}\n\n"
-            f"Retrieved data:\n{context}\n\n"
-            f"Write the analysis:"
-        )
+        prompt += f"User question:\n{question}\n\nRetrieved data:\n{context}\n\nWrite the analysis:"
 
-        response = await llm.ainvoke([
-            SystemMessage(content=SYNTHESIS_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
+        response = await llm.ainvoke(
+            [
+                SystemMessage(content=SYNTHESIS_SYSTEM_PROMPT),
+                HumanMessage(content=prompt),
+            ]
+        )
 
         content = (response.content or "").strip()
         if not content:
@@ -243,7 +245,6 @@ def build_graph(
                 "Try asking about a specific company or ticker."
             )
         return {"messages": [AIMessage(content=content)]}
-
 
     builder = StateGraph(AgentState)
     builder.add_node("planner", planner_node)
@@ -254,6 +255,5 @@ def build_graph(
     builder.add_edge("planner", "gather")
     builder.add_edge("gather", "synthesis")
     builder.add_edge("synthesis", END)
-
 
     return builder.compile(checkpointer=MemorySaver())

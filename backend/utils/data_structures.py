@@ -1,10 +1,10 @@
 import json
-
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, TypedDict
 from textwrap import dedent
+from typing import Any, TypedDict
 
-from backend.utils import normalize_name
+from .io_utils import normalize_name
+
 
 @dataclass
 class Article:
@@ -15,7 +15,7 @@ class Article:
     url: str
     published_at: str
     fetched_on: str
-    entities: list['Entity']
+    entities: list["Entity"]
 
 
 @dataclass
@@ -23,7 +23,8 @@ class Entity:
     symbol: str
     name: str
     sentiment: str
-    industry: Optional[str] = None
+    industry: str | None = None
+
 
 def format_sentiment(score: float) -> str:
     if score > 0.2:
@@ -38,16 +39,16 @@ def format_sentiment(score: float) -> str:
 class NewsDocument:
     id: str
     content: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
     @classmethod
-    def from_article(cls, article: Article) -> 'NewsDocument':
+    def from_article(cls, article: Article) -> "NewsDocument":
         content = cls._build_content(article)
         metadata = cls._build_metadata(article)
         return cls(id=article.uuid, content=content, metadata=metadata)
 
     @staticmethod
-    def _build_content(article: 'Article') -> str:
+    def _build_content(article: "Article") -> str:
         return dedent(f"""\
             Title: {article.title}
             Keywords present: {article.keywords}
@@ -55,7 +56,7 @@ class NewsDocument:
         """).strip()
 
     @staticmethod
-    def _build_metadata(article: Article) -> Dict[str, Any]:
+    def _build_metadata(article: Article) -> dict[str, Any]:
         entities = [
             {
                 "name": e.name,
@@ -74,7 +75,8 @@ class NewsDocument:
             "entity_symbols": ", ".join(e["symbol"] for e in entities),
         }
 
+
 class Candidate(TypedDict):
     document: str
-    metadata: Dict
+    metadata: dict
     score: float

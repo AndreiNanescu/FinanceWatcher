@@ -1,13 +1,14 @@
 import asyncio
 import atexit
 import threading
+from pathlib import Path
 
 from dotenv import load_dotenv
-from pathlib import Path
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from backend.mcp_server.agent import Agent
+
 from .data_pipeline import main as pipeline
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -22,6 +23,7 @@ threading.Thread(target=_loop.run_forever, daemon=True, name="agent-loop").start
 def _run(coro):
     """Block the calling (Flask worker) thread until the coroutine completes."""
     return asyncio.run_coroutine_threadsafe(coro, _loop).result()
+
 
 _agent = Agent()
 _agent_ready = False
@@ -45,6 +47,7 @@ def _ensure_agent() -> bool:
 
 is_updating = False
 status_lock = threading.Lock()
+
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
@@ -76,7 +79,7 @@ def update_data():
             is_updating = True
         try:
             pipeline(
-                symbols=['AAPL', 'GOOGL', 'AMZN', 'NVDA', 'TSM', 'BLK', 'RTX', 'SPY', 'JPM', 'GS', 'XOM'],
+                symbols=["AAPL", "GOOGL", "AMZN", "NVDA", "TSM", "BLK", "RTX", "SPY", "JPM", "GS", "XOM"],
                 days=1,
                 max_pages=5,
             )
@@ -108,5 +111,3 @@ atexit.register(lambda: _run(_agent.close()) if _agent_ready else None)
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
-
-

@@ -3,7 +3,6 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta
-from typing import List, Optional
 
 import yfinance as yf
 from mcp.server.fastmcp import FastMCP
@@ -11,18 +10,19 @@ from mcp.types import ToolAnnotations
 
 from backend.data import ChromaClient, Querier
 from backend.rag import BGEReranker
-from backend.utils import logger, format_metadata
+from backend.utils import format_metadata, logger
 
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-mcp = FastMCP('FinanceWatcherServer')
+mcp = FastMCP("FinanceWatcherServer")
 
 chroma_client = ChromaClient()
 reranker = BGEReranker()
 query_service = Querier(chroma_client=chroma_client, reranker=reranker)
 
-def _parse_symbols(symbols: Optional[str]) -> Optional[List[str]]:
+
+def _parse_symbols(symbols: str | None) -> list[str] | None:
     """Accept a comma/space separated symbols string and return a clean list."""
     if not symbols:
         return None
@@ -31,7 +31,7 @@ def _parse_symbols(symbols: Optional[str]) -> Optional[List[str]]:
     return cleaned or None
 
 
-def _run_news_query(query: str, symbols: Optional[str]) -> str:
+def _run_news_query(query: str, symbols: str | None) -> str:
     tickers = _parse_symbols(symbols)
     logger.info(f"Called query_chroma with query: {query!r}, symbols: {tickers}")
     docs = query_service.search(query, tickers=tickers)
@@ -42,7 +42,7 @@ def _run_news_query(query: str, symbols: Optional[str]) -> str:
     formatted_docs = []
     for item in docs:
         raw_doc = item.get("document", "").strip()
-        cleaned_doc = re.sub(r'^Keywords present:.*(?:\n|$)', '', raw_doc, flags=re.MULTILINE)
+        cleaned_doc = re.sub(r"^Keywords present:.*(?:\n|$)", "", raw_doc, flags=re.MULTILINE)
 
         metadata = item.get("metadata", {})
         metadata_str = format_metadata(metadata)
@@ -62,7 +62,7 @@ def _run_news_query(query: str, symbols: Optional[str]) -> str:
     annotations=ToolAnnotations(
         readOnlyHint=True,
         openWorldHint=True,
-    )
+    ),
 )
 async def query_chroma(query: str, symbols: str = "") -> str:
     """
@@ -74,17 +74,19 @@ async def query_chroma(query: str, symbols: str = "") -> str:
             used to filter results to the intended company.
 
     Returns:
-        str: A string containing the concatenated news articles. If no relevant news is found, returns a default message.
+        str: A string containing the concatenated news articles. If no relevant
+            news is found, returns a default message.
     """
     return await asyncio.to_thread(_run_news_query, query, symbols)
 
+
 def _fetch_price_sync(symbol: str, start_date: str, end_date: str) -> dict:
-    logger.info(f'Called fetch_price with symbol: {symbol}, start_date: {start_date}, end_date: {end_date}')
+    logger.info(f"Called fetch_price with symbol: {symbol}, start_date: {start_date}, end_date: {end_date}")
     try:
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
     except ValueError:
-        raise ValueError("start_date and end_date must be in YYYY-MM-DD format")
+        raise ValueError("start_date and end_date must be in YYYY-MM-DD format") from None
 
     if (end_dt - start_dt).days > 90:
         logger.info("Date range exceeded 90 days; clipping to most recent 90 days.")
@@ -117,9 +119,9 @@ def _fetch_price_sync(symbol: str, start_date: str, end_date: str) -> dict:
         "Returns a JSON-like dict mapping dates to price details. DO NOT exceed 90 days when specifying date ranges"
     ),
     annotations=ToolAnnotations(
-            readOnlyHint=True,
-            openWorldHint=True,
-        )
+        readOnlyHint=True,
+        openWorldHint=True,
+    ),
 )
 async def fetch_price(symbol: str, start_date: str, end_date: str) -> dict:
     """
@@ -141,6 +143,7 @@ async def fetch_price(symbol: str, start_date: str, end_date: str) -> dict:
     """
     return await asyncio.to_thread(_fetch_price_sync, symbol, start_date, end_date)
 
+
 if __name__ == "__main__":
     logger.info("Starting MCP server")
-    mcp.run(transport='sse')
+    mcp.run(transport="sse")

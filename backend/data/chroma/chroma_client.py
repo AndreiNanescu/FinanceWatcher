@@ -1,21 +1,22 @@
-import chromadb
 import json
-
 from datetime import datetime
 from pathlib import Path
+
+import chromadb
 
 from backend.rag import Embedder
 from backend.utils import logger
 
+
 class ChromaClient:
-    def __init__(self, db_name: str = 'embeddings'):
+    def __init__(self, db_name: str = "embeddings"):
         self.db_name = db_name
 
         self._setup_chroma()
 
     def _init_path(self) -> str:
         root_path = Path(__file__).resolve().parent.parent
-        chroma_path = root_path / 'db' / self.db_name
+        chroma_path = root_path / "db" / self.db_name
 
         return str(chroma_path)
 
@@ -24,10 +25,7 @@ class ChromaClient:
         try:
             self.client = chromadb.PersistentClient(path=db_path)
             self.embedder = Embedder()
-            self.collection = self.client.get_or_create_collection(
-                name=self.db_name,
-                embedding_function=self.embedder
-            )
+            self.collection = self.client.get_or_create_collection(name=self.db_name, embedding_function=self.embedder)
             logger.info(f"Initialized {self.db_name} Chroma DB at {db_path}")
         except Exception as e:
             logger.error(f"Failed to initialize Chroma DB: {e}")
@@ -45,29 +43,23 @@ class ChromaClient:
 
     def query(self, query_texts, n_results, where, where_document):
         return self.collection.query(
-            query_texts=query_texts,
-            n_results=n_results,
-            where=where,
-            where_document=where_document
+            query_texts=query_texts, n_results=n_results, where=where, where_document=where_document
         )
 
     def delete_article(self, article_id: str) -> None:
         results = self.collection.get(where={"article_id": {"$eq": article_id}})
-        if results['ids']:
-            self.collection.delete(ids=results['ids'])
+        if results["ids"]:
+            self.collection.delete(ids=results["ids"])
 
     def export_as_json(self, output_path: str):
-        results = self.collection.get(
-            limit=1000000,
-            include=["documents", "metadatas"]
-        )
+        results = self.collection.get(limit=1000000, include=["documents", "metadatas"])
 
         export_data = []
         docs = results.get("documents", [])
         metas = results.get("metadatas", [])
         ids = results.get("ids", [])
 
-        for doc, meta, id_ in zip(docs, metas, ids):
+        for doc, meta, id_ in zip(docs, metas, ids, strict=False):
             doc_lines = doc.splitlines()
             doc_cleaned = "\n\n".join(line.strip() for line in doc_lines)
 
@@ -86,11 +78,13 @@ class ChromaClient:
             except json.JSONDecodeError:
                 pass
 
-            export_data.append({
-                "id": id_,
-                "document": doc_cleaned,
-                "metadata": meta,
-            })
+            export_data.append(
+                {
+                    "id": id_,
+                    "document": doc_cleaned,
+                    "metadata": meta,
+                }
+            )
 
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(export_data, f, indent=2, ensure_ascii=False)

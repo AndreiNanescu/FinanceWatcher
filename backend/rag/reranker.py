@@ -1,9 +1,8 @@
 import torch
-
-from typing import List, Tuple
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from backend.utils import logger
+
 from .device import safe_device
 
 
@@ -30,7 +29,7 @@ class BGEReranker:
             if self.verbose:
                 logger.info("BGEReranker loaded and ready")
 
-    def rerank(self, query: str, passages: List[str], top_k: int = 5) -> List[Tuple[str, float]]:
+    def rerank(self, query: str, passages: list[str], top_k: int = 5) -> list[tuple[str, float]]:
         self._load_model()
 
         if not passages:
@@ -47,7 +46,7 @@ class BGEReranker:
         if scores.dim() == 0:
             scores = scores.unsqueeze(0)
 
-        passage_scores = [(p, s.item()) for p, s in zip(passages, scores)]
+        passage_scores = [(p, s.item()) for p, s in zip(passages, scores, strict=False)]
         passage_scores.sort(key=lambda x: x[1], reverse=True)
 
         return passage_scores[:top_k]

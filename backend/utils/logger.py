@@ -1,9 +1,10 @@
-import logging
-from pathlib import Path
-from datetime import datetime
-import sys
-from tqdm import tqdm
 import atexit
+import logging
+import sys
+from datetime import datetime
+from pathlib import Path
+
+from tqdm import tqdm
 
 LOG_FILE_PATH = None
 
