@@ -18,16 +18,22 @@ class Querier:
         self.client = chroma_client
 
     def search(self, query_text: str, n_results: int = 50, contains_text: Optional[str] = None, top_n_rerank: int = 5,
-              threshold: float = 0.75) -> List[Dict]:
+              threshold: float = 0.5, tickers: Optional[List[str]] = None) -> List[Dict]:
 
-        filters = self._build_filters(query_text)
-        logger.info(f'Filters {filters}')
-        raw_results = self._execute_query(query_text=query_text, n_results=n_results, filters=filters,
+        if tickers is None:
+            tickers = self._extract_ticker(query_text)
+        logger.info(f'Requested tickers {tickers}')
+        raw_results = self._execute_query(query_text=query_text, n_results=n_results, filters=None,
                                           contains_text=contains_text)
         candidates = self._build_candidates(raw_results)
 
         if not candidates:
             return []
+
+        if tickers:
+            candidates = self._filter_by_tickers(candidates, tickers)
+            if not candidates:
+                return []
 
         recent_candidates = self._filter_by_date(candidates, months=6)
         if not recent_candidates:
@@ -35,6 +41,17 @@ class Querier:
 
         final_results = self._rerank_candidates(query_text, recent_candidates, top_n_rerank, threshold)
         return final_results
+
+    @staticmethod
+    def _filter_by_tickers(candidates: List[Dict], tickers: List[str]) -> List[Dict]:
+        wanted = {t.strip().upper() for t in tickers if t.strip()}
+        filtered = []
+        for c in candidates:
+            symbols_str = c["metadata"].get("entity_symbols", "") or ""
+            have = {s.strip().upper() for s in symbols_str.split(",") if s.strip()}
+            if wanted & have:
+                filtered.append(c)
+        return filtered
 
     def _execute_query(self, query_text: str, n_results: int,
                        filters: Optional[dict], contains_text: Optional[str]) -> Dict:
@@ -51,22 +68,6 @@ class Querier:
         if result:
             return result
         return None
-
-    def _build_filters(self, query_text: str) -> Optional[Dict]:
-        tickers = self._extract_ticker(query_text)
-
-        if not tickers:
-            return None
-
-        conditions = []
-        if tickers:
-            conditions.append({"entity_symbols": {"$in": tickers}})
-
-        if len(conditions) == 1:
-            return conditions[0]
-
-        if len(conditions) > 1:
-            return {"$or": conditions}
 
     @staticmethod
     def _build_candidates(results: Dict) -> List[Dict]:
@@ -113,15 +114,12 @@ class Querier:
                     "reranker_score": rerank_score,
                 })
 
-        if not top_candidates and reranked:
-            passage, rerank_score = reranked[0]
-            orig = next(c for c in candidates if c["document"] == passage)
-            top_candidates.append({
-                "document": passage,
-                "metadata": orig["metadata"],
-                "retriever_score": orig["score"],
-                "reranker_score": rerank_score,
-            })
+        if not top_candidates:
+            logger.info(
+                f"No passages cleared rerank threshold {threshold}; "
+                f"best score was {reranked[0][1]:.3f}" if reranked else
+                "No passages to rerank"
+            )
 
         top_candidates.sort(key=lambda x: x["reranker_score"], reverse=True)
         return top_candidates

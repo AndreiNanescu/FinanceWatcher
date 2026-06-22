@@ -10,15 +10,7 @@ _MODEL = "llama3.1:8b"
 
 class Agent:
     """
-    Multi-agent orchestrator backed by LangGraph.
-
-    Graph topology
-    --------------
-    START → supervisor → chroma_agent ──┐
-                      ↘ yfinance_agent ─┴→ supervisor → … → END
-
-    The supervisor routes each turn to the appropriate specialist and
-    synthesises the final analyst report once all data is gathered.
+    Multi-agent orchestrator backed.
     """
 
     def __init__(self) -> None:
@@ -31,24 +23,28 @@ class Agent:
         self._mcp_client = MultiServerMCPClient(
             {"finance": {"url": _MCP_URL, "transport": "sse"}}
         )
-        await self._mcp_client.__aenter__()
 
-        tools = self._mcp_client.get_tools()
+        tools = await self._mcp_client.get_tools()
         chroma_tools = [t for t in tools if t.name == "get_news_for_company_or_symbol"]
         yfinance_tools = [t for t in tools if t.name == "fetch_price"]
 
         self.graph = build_graph(self.llm, chroma_tools, yfinance_tools)
 
-    async def ask(self, message: str) -> str:
+    async def ask(self, message: str, thread_id: str = "default") -> str:
+
         result = await self.graph.ainvoke(
-            {"messages": [HumanMessage(content=message)]}
+            {"messages": [HumanMessage(content=message)]},
+            config={"configurable": {"thread_id": thread_id}},
         )
-        return result["messages"][-1].content
+
+        for msg in reversed(result["messages"]):
+            content = getattr(msg, "content", "")
+            if isinstance(content, str) and content.strip():
+                return content
+        return "I couldn't generate a response."
 
     async def close(self) -> None:
-        """Gracefully close the MCP connection."""
-        if self._mcp_client is not None:
-            await self._mcp_client.__aexit__(None, None, None)
+        self._mcp_client = None
 
-    async def __call__(self, message: str) -> str:
-        return await self.ask(message=message)
+    async def __call__(self, message: str, thread_id: str = "default") -> str:
+        return await self.ask(message=message, thread_id=thread_id)

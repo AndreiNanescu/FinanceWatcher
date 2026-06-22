@@ -1,7 +1,9 @@
+import asyncio
 import os
 import re
 import sys
 from datetime import datetime, timedelta
+from typing import List, Optional
 
 import yfinance as yf
 from mcp.server.fastmcp import FastMCP
@@ -20,26 +22,19 @@ chroma_client = ChromaClient()
 reranker = BGEReranker()
 query_service = Querier(chroma_client=chroma_client, reranker=reranker)
 
-@mcp.tool(
-    name="get_news_for_company_or_symbol",
-    description="Retrieves curated news articles (documents + metadata) from Chroma DB for the specified company or stock symbol.",
-    annotations=ToolAnnotations(
-        readOnlyHint=True,
-        openWorldHint=True,
-    )
-)
-def query_chroma(query: str) -> str:
-    """
-    Queries the Chroma database for news articles matching the provided query string.
+def _parse_symbols(symbols: Optional[str]) -> Optional[List[str]]:
+    """Accept a comma/space separated symbols string and return a clean list."""
+    if not symbols:
+        return None
+    parts = re.split(r"[,\s]+", symbols.strip())
+    cleaned = [p.strip().upper() for p in parts if p.strip()]
+    return cleaned or None
 
-    Args:
-        query (str): The search term, which can be a company name or stock symbol.
 
-    Returns:
-        str: A string containing the concatenated news articles. If no relevant news is found, returns a default message.
-    """
-    logger.info(f"Called query_chroma with query: {query}")
-    docs = query_service.search(query)
+def _run_news_query(query: str, symbols: Optional[str]) -> str:
+    tickers = _parse_symbols(symbols)
+    logger.info(f"Called query_chroma with query: {query!r}, symbols: {tickers}")
+    docs = query_service.search(query, tickers=tickers)
 
     if not docs:
         return "No relevant news found."
@@ -56,6 +51,65 @@ def query_chroma(query: str) -> str:
 
     return "\n\n".join(formatted_docs)
 
+
+@mcp.tool(
+    name="get_news_for_company_or_symbol",
+    description=(
+        "Retrieves curated news articles (documents + metadata) from Chroma DB for the specified "
+        "company or stock symbol. Pass the resolved ticker(s) in `symbols` (comma separated) so "
+        "results can be filtered to the right company; `query` is the free-text search."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        openWorldHint=True,
+    )
+)
+async def query_chroma(query: str, symbols: str = "") -> str:
+    """
+    Queries the Chroma database for news articles matching the provided query string.
+
+    Args:
+        query (str): The search term, which can be a company name or stock symbol.
+        symbols (str): Optional comma-separated ticker(s) (e.g. "AAPL" or "AAPL, MSFT")
+            used to filter results to the intended company.
+
+    Returns:
+        str: A string containing the concatenated news articles. If no relevant news is found, returns a default message.
+    """
+    return await asyncio.to_thread(_run_news_query, query, symbols)
+
+def _fetch_price_sync(symbol: str, start_date: str, end_date: str) -> dict:
+    logger.info(f'Called fetch_price with symbol: {symbol}, start_date: {start_date}, end_date: {end_date}')
+    try:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError("start_date and end_date must be in YYYY-MM-DD format")
+
+    if (end_dt - start_dt).days > 90:
+        logger.info("Date range exceeded 90 days; clipping to most recent 90 days.")
+        end_dt = datetime.utcnow()
+        start_dt = end_dt - timedelta(days=90)
+
+        start_date = start_dt.strftime("%Y-%m-%d")
+        end_date = end_dt.strftime("%Y-%m-%d")
+
+    # Range is capped at 90 days above, so daily bars stay manageable while
+    # preserving granularity.
+    interval = "1d"
+
+    ticker = yf.Ticker(symbol)
+    df = ticker.history(interval=interval, start=start_date, end=end_date)
+
+    if df.empty:
+        raise ValueError(f"No data found for {symbol} between {start_date} and {end_date}.")
+
+    df.index = df.index.strftime("%Y-%m-%d")
+    df = df[["Open", "High", "Low", "Close", "Volume"]]
+
+    return df.to_dict(orient="index")
+
+
 @mcp.tool(
     name="fetch_price",
     description=(
@@ -67,7 +121,7 @@ def query_chroma(query: str) -> str:
             openWorldHint=True,
         )
 )
-def fetch_price(symbol: str, start_date: str, end_date: str) -> dict:
+async def fetch_price(symbol: str, start_date: str, end_date: str) -> dict:
     """
     Fetch historical price data for a stock.
 
@@ -85,33 +139,7 @@ def fetch_price(symbol: str, start_date: str, end_date: str) -> dict:
     Raises:
         ValueError: If no data returned or invalid date range.
     """
-    logger.info(f'Called fetch_price with symbol: {symbol}, start_date: {start_date}, end_date: {end_date}')
-    try:
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-    except ValueError:
-        raise ValueError("start_date and end_date must be in YYYY-MM-DD format")
-
-    if (end_dt - start_dt).days > 90:
-        logger.info("Date range exceeded 90 days; clipping to most recent 90 days.")
-        end_dt = datetime.utcnow()
-        start_dt = end_dt - timedelta(days=90)
-
-        start_date = start_dt.strftime("%Y-%m-%d")
-        end_date = end_dt.strftime("%Y-%m-%d")
-
-    interval = "1d" if (end_dt - start_dt).days <= 30 else "1mo"
-
-    ticker = yf.Ticker(symbol)
-    df = ticker.history(interval=interval, start=start_date, end=end_date)
-
-    if df.empty:
-        raise ValueError(f"No data found for {symbol} between {start_date} and {end_date}.")
-
-    df.index = df.index.strftime("%Y-%m-%d")
-    df = df[["Open", "High", "Low", "Close", "Volume"]]
-
-    return df.to_dict(orient="index")
+    return await asyncio.to_thread(_fetch_price_sync, symbol, start_date, end_date)
 
 if __name__ == "__main__":
     logger.info("Starting MCP server")

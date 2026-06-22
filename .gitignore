@@ -1,5 +1,24 @@
+# Secrets / env
 .env
 .venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Data / model artifacts
 backend/rag/raw
 backend/db/
+backend/data/db/
+backend/data/chroma/db/
 logs/
+
+# Runtime / scraper artifacts
+*.log
+cookies.json
+
+# Editor / IDE
+.idea/
+.vscode/
