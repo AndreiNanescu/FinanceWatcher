@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -56,7 +56,7 @@ class MarketAuxGatherer(DataGatherer):
         if published_on:
             timestamp = published_on.replace("-", "") + "T000000Z"
         else:
-            timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+            timestamp = datetime.now(UTC).replace(tzinfo=None).strftime("%Y%m%dT%H%M%SZ")
 
         symbol_str = "_".join(s.replace("/", "-") for s in self.symbols)[:50]
         filename = f"marketaux_{symbol_str}_{timestamp}.json"
@@ -207,48 +207,101 @@ class MarketAuxGatherer(DataGatherer):
 
         return deduped
 
+    def _fetch_day(self, date_str: str | None, max_pages: int, start_page: int) -> tuple[list[dict], bool]:
+        """Fetch up to max_pages pages for a single day (or the latest articles
+        when date_str is None).
+
+        Returns (pages, stop_all) where stop_all signals an API-level stop
+        (e.g. quota reached or a failed request) that should halt the whole run,
+        not just this day.
+        """
+        pages: list[dict] = []
+        for page in range(start_page, start_page + max_pages):
+            try:
+                data = (
+                    self._request_data(published_on=date_str, page=page)
+                    if date_str
+                    else self._request_data(page=page)
+                )
+            except StopFetching as e:
+                logger.info(f"Stopped fetching data early due to API error: {e}")
+                return pages, True
+
+            if not data:
+                return pages, True
+
+            if not data.get("data"):
+                break
+
+            pages.append(data)
+            if len(data.get("data", [])) < self.limit:
+                break
+
+        return pages, False
+
+    @staticmethod
+    def _build_day_range(published_after: str | None, published_before: str | None, days: int) -> list[str]:
+        """Build the list of YYYY-MM-DD days to fetch for a date-range request.
+
+        - both bounds given  -> every day in [after, before] inclusive.
+        - only `before` given -> `days` days ending at (and including) before
+          (walking backward — used to enrich the DB with older articles).
+        - only `after` given  -> `days` days starting at after (walking forward).
+        """
+        fmt = "%Y-%m-%d"
+        try:
+            after_dt = datetime.strptime(published_after, fmt) if published_after else None
+            before_dt = datetime.strptime(published_before, fmt) if published_before else None
+        except ValueError:
+            logger.error("published_after/published_before must be in YYYY-MM-DD format")
+            return []
+
+        span = max(days, 1)
+        if after_dt and before_dt:
+            start, end = after_dt, before_dt
+        elif before_dt:
+            end = before_dt
+            start = before_dt - timedelta(days=span - 1)
+        elif after_dt:
+            start = after_dt
+            end = after_dt + timedelta(days=span - 1)
+        else:
+            return []
+
+        if start > end:
+            start, end = end, start
+
+        out = []
+        day = start
+        while day <= end:
+            out.append(day.strftime(fmt))
+            day += timedelta(days=1)
+        return out
+
     def _fetch_by_days(self, days: int, max_pages: int, start_page: int) -> list[dict]:
         all_data = []
         for day_delta in range(days):
-            date_str = (datetime.utcnow() - timedelta(days=day_delta)).strftime("%Y-%m-%d") if days > 1 else None
-            for page in range(start_page, start_page + max_pages):
-                try:
-                    data = (
-                        self._request_data(published_on=date_str, page=page)
-                        if date_str
-                        else self._request_data(page=page)
-                    )
-                except StopFetching as e:
-                    logger.info(f"Stopped fetching data early due to API error: {e}")
-                    return all_data
-
-                if not data or not data.get("data"):
-                    return all_data
-
-                all_data.append(data)
-                if len(data.get("data", [])) < self.limit:
-                    return all_data
-
+            date_str = (
+                (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=day_delta)).strftime("%Y-%m-%d")
+                if days > 1
+                else None
+            )
+            pages, stop_all = self._fetch_day(date_str, max_pages, start_page)
+            all_data.extend(pages)
+            if stop_all:
+                return all_data
             if days == 1:
                 break
         return all_data
 
     def _fetch_by_date_range(
-        self, published_after: str | None, published_before: str | None, max_pages: int, start_page: int
+        self, published_after: str | None, published_before: str | None, max_pages: int, start_page: int, days: int
     ) -> list[dict]:
         all_data = []
-        for page in range(start_page, start_page + max_pages):
-            try:
-                data = self._request_data(published_after=published_after, published_before=published_before, page=page)
-            except StopFetching as e:
-                logger.info(f"Stopped fetching data early due to API error: {e}")
-                return all_data
-
-            if not data or not data.get("data"):
-                return all_data
-
-            all_data.append(data)
-            if len(data.get("data", [])) < self.limit:
+        for date_str in self._build_day_range(published_after, published_before, days):
+            pages, stop_all = self._fetch_day(date_str, max_pages, start_page)
+            all_data.extend(pages)
+            if stop_all:
                 return all_data
         return all_data
 
@@ -264,7 +317,7 @@ class MarketAuxGatherer(DataGatherer):
         if published_after is None and published_before is None:
             raw_data = self._fetch_by_days(days, max_pages, start_page)
         else:
-            raw_data = self._fetch_by_date_range(published_after, published_before, max_pages, start_page)
+            raw_data = self._fetch_by_date_range(published_after, published_before, max_pages, start_page, days)
 
         if not raw_data:
             return None, None
