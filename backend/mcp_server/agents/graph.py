@@ -34,6 +34,17 @@ _TICKER_NAME_MATCH_MIN = 60
 class Company(BaseModel):
     name: str = Field(description="Official company name, e.g. 'Apple'")
     ticker: str = Field(description="Primary US-listed ticker, e.g. 'AAPL'")
+    news_query: str = Field(
+        default="",
+        description=(
+            "A concise but descriptive news-search phrase for this company that "
+            "fuses its name with the specific topic/intent of the user's question. "
+            "For a focused question use focused terms (e.g. 'Apple AI strategy, "
+            "Apple Intelligence, Siri'); for a general 'how is it doing' question "
+            "use a broad phrase covering recent performance, earnings, products and "
+            "outlook. Always include the company name."
+        ),
+    )
 
 
 class Plan(BaseModel):
@@ -52,13 +63,9 @@ class Plan(BaseModel):
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     plan: Plan | None
-    # One combined block per company (news + price summary together) so the
-    # model integrates them instead of treating news and price as separate dumps.
     sections: list[str]
 
 
-# Sentinel the news tool returns when nothing relevant is found (see
-# mcp_server/server.py::_run_news_query).
 _NO_NEWS_SENTINEL = "no relevant news found"
 
 
@@ -67,21 +74,17 @@ def _is_no_news(result: str) -> bool:
 
 
 def _summarize_prices(label: str, days: int, raw) -> str:
-    """Turn raw OHLCV (dict or JSON string) into a compact, pre-computed summary.
-
-    The synthesis model is small and tends to drown in (and miscompute from) a
-    raw table of daily bars. Computing the few figures that matter here in Python
-    gives it correct numbers in one short sentence so it can focus on the news.
+    """
+    Turn raw OHLCV (dict or JSON string) into a compact, pre-computed summary.
     """
     try:
         data = raw if isinstance(raw, dict) else json.loads(str(raw))
         if not isinstance(data, dict) or not data:
             raise ValueError("empty or non-dict price data")
     except Exception:
-        # Couldn't parse — pass the raw payload through rather than lose the data.
         return f"Price for {label} (last {days} days): {raw}"
 
-    rows = sorted(data.items())  # ISO date strings sort chronologically
+    rows = sorted(data.items())
     first_date, first = rows[0]
     last_date, last = rows[-1]
 
@@ -116,14 +119,16 @@ def _strip_markdown(text: str) -> str:
     """Safety net: enforce the prose style the prompt asks for even when the
     model slips into headings/bullets/bold despite the instructions."""
     cleaned_lines = []
+
     for line in text.split("\n"):
-        line = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)  # markdown headings
-        line = re.sub(r"^\s*[\*\-•]\s+", "", line)  # bullet markers
+        line = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)
+        line = re.sub(r"^\s*[\*\-•]\s+", "", line)
         cleaned_lines.append(line)
+
     out = "\n".join(cleaned_lines)
-    out = out.replace("**", "").replace("__", "")  # bold markers
-    # Collapse 3+ blank lines that de-bulleting may leave behind.
+    out = out.replace("**", "").replace("__", "")
     out = re.sub(r"\n{3,}", "\n\n", out)
+
     return out.strip()
 
 
@@ -185,11 +190,7 @@ async def _ticker_matches_company(name: str, ticker: str) -> bool:
     return True
 
 
-def build_graph(
-    llm: ChatOllama,
-    chroma_tools: list,
-    yfinance_tools: list,
-) -> "CompiledStateGraph":
+def build_graph(llm: ChatOllama, chroma_tools: list, yfinance_tools: list) -> "CompiledStateGraph":
     """
     Deterministic financial-analysis graph.
 
@@ -210,7 +211,6 @@ def build_graph(
     yfinance_tool = yfinance_tools[0] if yfinance_tools else None
     planner_llm = llm.with_structured_output(Plan)
 
-    # -- Planner -------------------------------------------------------------
 
     async def planner_node(state: AgentState) -> dict:
         question = _latest_user_question(state["messages"])
@@ -233,18 +233,23 @@ def build_graph(
         plan = state["plan"] or Plan()
         question = _latest_user_question(state["messages"])
 
-        # The planner picks the window from the question's time horizon; clamp to
-        # the tool's supported range so a bad value can't break the call.
         price_days = max(1, min(plan.price_days or _PRICE_LOOKBACK_DAYS, _MAX_PRICE_DAYS))
 
         targets = plan.companies or ([] if not plan.needs_news else [None])
 
         async def get_news(company, label: str) -> str:
-            query = f"{company.name} ({company.ticker})" if company else question
-            symbols = company.ticker if company else ""
+            if company:
+                entity = f"{company.name} ({company.ticker})"
+                query = company.news_query.strip() or entity
+                rerank_query = entity
+                symbols = company.ticker
+            else:
+                query = question
+                rerank_query = question
+                symbols = ""
             try:
                 result = await asyncio.wait_for(
-                    chroma_tool.ainvoke({"query": query, "symbols": symbols}),
+                    chroma_tool.ainvoke({"query": query, "symbols": symbols, "rerank_query": rerank_query}),
                     timeout=_NEWS_TIMEOUT,
                 )
             except TimeoutError:
@@ -252,9 +257,6 @@ def build_graph(
             except Exception as exc:
                 return f"News: retrieval failed for {label}: {exc}"
 
-            # Make an empty result impossible to dress up: emit a blunt, explicit
-            # marker the synthesis model must surface verbatim instead of padding
-            # with generic commentary.
             if not result or not str(result).strip() or _is_no_news(str(result)):
                 return (
                     f"News: NO NEWS AVAILABLE for {label}. No recent news articles were found. "
@@ -283,15 +285,19 @@ def build_graph(
         async def gather_company(company) -> str:
             label = f"{company.name} ({company.ticker})" if company else question
             subtasks = []
+
             if plan.needs_news and chroma_tool is not None:
                 subtasks.append(get_news(company, label))
+
             if plan.needs_price and yfinance_tool is not None and company is not None:
                 subtasks.append(get_price(company, label))
+
             parts = await asyncio.gather(*subtasks) if subtasks else []
             header = f"Company: {label}" if company else f"Topic: {question}"
             return header + "\n" + "\n\n".join(parts)
 
         sections = await asyncio.gather(*[gather_company(c) for c in targets]) if targets else []
+
         return {"sections": list(sections)}
 
     async def synthesis_node(state: AgentState) -> dict:

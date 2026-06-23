@@ -1,11 +1,15 @@
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
 import chromadb
+from chromadb.config import Settings
 
 from backend.rag import Embedder
 from backend.utils import logger
+
+logging.getLogger("chromadb.telemetry.product.posthog").setLevel(logging.CRITICAL)
 
 
 class ChromaClient:
@@ -23,7 +27,8 @@ class ChromaClient:
     def _setup_chroma(self) -> None:
         db_path = self._init_path()
         try:
-            self.client = chromadb.PersistentClient(path=db_path)
+            self.client = chromadb.PersistentClient(path=db_path, settings=Settings(anonymized_telemetry=False))
+
             self.embedder = Embedder()
             self.collection = self.client.get_or_create_collection(name=self.db_name, embedding_function=self.embedder)
             logger.info(f"Initialized {self.db_name} Chroma DB at {db_path}")

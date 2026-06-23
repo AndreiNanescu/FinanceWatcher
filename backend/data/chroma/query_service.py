@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from backend.rag import BGEReranker
 from backend.utils import Candidate, logger
@@ -24,7 +24,10 @@ class Querier:
         threshold: float = 0.3,
         min_floor: float = 0.1,
         tickers: list[str] | None = None,
+        rerank_query: str | None = None,
     ) -> list[dict]:
+
+        rerank_query = rerank_query or query_text
 
         if tickers is None:
             tickers = self._extract_ticker(query_text)
@@ -46,7 +49,7 @@ class Querier:
         if not recent_candidates:
             return []
 
-        final_results = self._rerank_candidates(query_text, recent_candidates, top_n_rerank, threshold, min_floor)
+        final_results = self._rerank_candidates(rerank_query, recent_candidates, top_n_rerank, threshold, min_floor)
         return final_results
 
     @staticmethod
@@ -87,8 +90,9 @@ class Querier:
 
     @staticmethod
     def _filter_by_date(candidates: list[Candidate], months: int = 6) -> list[Candidate]:
-        cutoff_date = datetime.utcnow() - timedelta(days=30 * months)
+        cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30 * months)
         filtered = []
+
         for c in candidates:
             published_at_str = c["metadata"].get("published_at")
             if not published_at_str:
@@ -103,6 +107,7 @@ class Querier:
                     continue
             if published_at_dt >= cutoff_date:
                 filtered.append(c)
+
         return filtered
 
     def _rerank_candidates(
@@ -122,11 +127,6 @@ class Querier:
 
         top_candidates = [_to_result(p, s) for p, s in reranked if s >= threshold]
 
-        # Floor-gated fallback: if nothing clears the confident threshold, keep
-        # the single best passage *only* if it still clears a low floor. Rerank
-        # scores are strongly bimodal — genuinely on-topic articles score well
-        # above the floor while co-tagged junk collapses near zero — so this
-        # rescues thin-but-real coverage without re-admitting off-topic matches.
         if not top_candidates and reranked and reranked[0][1] >= min_floor:
             logger.info(
                 f"No passage cleared threshold {threshold}; "
@@ -138,4 +138,5 @@ class Querier:
             logger.info(f"No passage cleared threshold {threshold} or floor {min_floor}; best was {best}")
 
         top_candidates.sort(key=lambda x: x["reranker_score"], reverse=True)
+
         return top_candidates

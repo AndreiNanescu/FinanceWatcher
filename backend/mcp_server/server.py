@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import yfinance as yf
 from mcp.server.fastmcp import FastMCP
@@ -31,10 +31,10 @@ def _parse_symbols(symbols: str | None) -> list[str] | None:
     return cleaned or None
 
 
-def _run_news_query(query: str, symbols: str | None) -> str:
+def _run_news_query(query: str, symbols: str | None, rerank_query: str | None) -> str:
     tickers = _parse_symbols(symbols)
-    logger.info(f"Called query_chroma with query: {query!r}, symbols: {tickers}")
-    docs = query_service.search(query, tickers=tickers)
+    logger.info(f"Called query_chroma with query: {query!r}, rerank_query: {rerank_query!r}, symbols: {tickers}")
+    docs = query_service.search(query, tickers=tickers, rerank_query=rerank_query or None)
 
     logger.info(f"query_chroma returning {len(docs)} article(s) to the model for query={query!r} symbols={tickers}")
 
@@ -59,27 +59,31 @@ def _run_news_query(query: str, symbols: str | None) -> str:
     description=(
         "Retrieves curated news articles (documents + metadata) from Chroma DB for the specified "
         "company or stock symbol. Pass the resolved ticker(s) in `symbols` (comma separated) so "
-        "results can be filtered to the right company; `query` is the free-text search."
+        "results can be filtered to the right company; `query` is the descriptive free-text search "
+        "used for retrieval, and `rerank_query` is an optional short focused query (e.g. the "
+        "company name and ticker) used to re-rank the retrieved candidates."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
         openWorldHint=True,
     ),
 )
-async def query_chroma(query: str, symbols: str = "") -> str:
+async def query_chroma(query: str, symbols: str = "", rerank_query: str = "") -> str:
     """
     Queries the Chroma database for news articles matching the provided query string.
 
     Args:
-        query (str): The search term, which can be a company name or stock symbol.
+        query (str): Descriptive free-text search used for embedding retrieval.
         symbols (str): Optional comma-separated ticker(s) (e.g. "AAPL" or "AAPL, MSFT")
             used to filter results to the intended company.
+        rerank_query (str): Optional short, focused query used to re-rank the
+            retrieved candidates. Falls back to `query` when empty.
 
     Returns:
         str: A string containing the concatenated news articles. If no relevant
             news is found, returns a default message.
     """
-    return await asyncio.to_thread(_run_news_query, query, symbols)
+    return await asyncio.to_thread(_run_news_query, query, symbols, rerank_query)
 
 
 _MAX_PRICE_DAYS = 365
@@ -92,14 +96,12 @@ def _fetch_price_sync(symbol: str, days: int) -> dict:
         days = 30
     days = max(1, min(days, _MAX_PRICE_DAYS))
 
-    end_dt = datetime.utcnow()
+    end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=days)
     start_date = start_dt.strftime("%Y-%m-%d")
     end_date = end_dt.strftime("%Y-%m-%d")
     logger.info(f"Called fetch_price with symbol: {symbol}, days: {days} ({start_date} → {end_date})")
 
-    # Daily bars for shorter windows keep full granularity; weekly bars for long
-    # ranges keep the payload manageable without losing the overall trend.
     interval = "1d" if days <= 90 else "1wk"
 
     ticker = yf.Ticker(symbol)
