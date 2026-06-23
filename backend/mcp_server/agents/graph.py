@@ -22,6 +22,8 @@ from .prompts import PLANNER_SYSTEM_PROMPT, SYNTHESIS_SYSTEM_PROMPT
 _MAX_COMPANIES = 4
 _PRICE_LOOKBACK_DAYS = 30
 _MAX_PRICE_DAYS = 365
+_DEFAULT_NEWS_COUNT = 5
+_MAX_NEWS_COUNT = 15
 _HISTORY_TURNS = 6
 
 _NEWS_TIMEOUT = 60
@@ -34,28 +36,53 @@ _TICKER_NAME_MATCH_MIN = 60
 class Company(BaseModel):
     name: str = Field(description="Official company name, e.g. 'Apple'")
     ticker: str = Field(description="Primary US-listed ticker, e.g. 'AAPL'")
-    news_query: str = Field(
+    needs_news: bool = Field(
+        default=True,
+        description=(
+            "Whether to fetch recent NEWS for THIS company. True for a general "
+            "status question or when the user asks about its news/events/sentiment; "
+            "set False if the user only asks about this company's price."
+        ),
+    )
+    needs_price: bool = Field(
+        default=True,
+        description=(
+            "Whether to fetch PRICE data for THIS company. True for a general "
+            "status question or when the user asks about its price/returns/"
+            "performance; set False if the user only asks about this company's news."
+        ),
+    )
+    news_focus: str = Field(
         default="",
         description=(
-            "A concise but descriptive news-search phrase for this company that "
-            "fuses its name with the specific topic/intent of the user's question. "
-            "For a focused question use focused terms (e.g. 'Apple AI strategy, "
-            "Apple Intelligence, Siri'); for a general 'how is it doing' question "
-            "use a broad phrase covering recent performance, earnings, products and "
-            "outlook. Always include the company name."
+            "A SHORT topical focus (2-5 words) ONLY when the question targets a "
+            "specific aspect of the company — e.g. 'China market risks', 'AI "
+            "strategy', 'legal issues', 'earnings', 'iPhone sales'. Used to rank "
+            "news toward that topic. Leave EMPTY for a broad/general 'how is it "
+            "doing' question. Pick the single focus of the question; never list "
+            "multiple topics and do not include the company name."
         ),
     )
 
 
 class Plan(BaseModel):
     companies: list[Company] = Field(default_factory=list)
+    # Fallback news flag for questions where no specific company is identified;
+    # per-company news/price selection lives on each Company.
     needs_news: bool = True
-    needs_price: bool = False
     price_days: int = Field(
         default=_PRICE_LOOKBACK_DAYS,
         description=(
             "Days of recent daily price history to fetch, chosen from the "
             "question's time horizon (7=week, 30=month, 90=quarter, up to 365=year)."
+        ),
+    )
+    news_count: int = Field(
+        default=_DEFAULT_NEWS_COUNT,
+        description=(
+            "How many news articles to retrieve per company, based on how broad "
+            "the question is: ~3-4 for a narrow/specific question, ~5 for a typical "
+            "status question, up to ~8 for a broad 'tell me everything' question."
         ),
     )
 
@@ -156,6 +183,18 @@ def _recent_history(messages: list, max_turns: int = _HISTORY_TURNS) -> str:
     return "\n".join(rendered)
 
 
+# Common-name <-> legal-name pairs that fuzzy matching can't catch because they
+# share no tokens (e.g. Google ↔ Alphabet). Maps ticker -> accepted name tokens
+# (already normalized via normalize_name). Extend as needed.
+_TICKER_NAME_ALIASES = {
+    "GOOGL": {"google", "alphabet"},
+    "GOOG": {"google", "alphabet"},
+    "META": {"meta", "facebook"},
+    "BRK.B": {"berkshire", "berkshire hathaway"},
+    "BRK.A": {"berkshire", "berkshire hathaway"},
+}
+
+
 async def _ticker_matches_company(name: str, ticker: str) -> bool:
     """Best-effort check that `ticker` actually belongs to `name`.
 
@@ -165,12 +204,12 @@ async def _ticker_matches_company(name: str, ticker: str) -> bool:
     never surface as "the price of X".
     """
 
-    def _lookup() -> str | None:
+    def _lookup() -> list[str]:
         try:
             info = yf.Ticker(ticker).info or {}
         except Exception:
-            return None
-        return info.get("longName") or info.get("shortName") or None
+            return []
+        return [n for n in (info.get("longName"), info.get("shortName"), info.get("displayName")) if n]
 
     try:
         reported = await asyncio.wait_for(asyncio.to_thread(_lookup), timeout=_VALIDATE_TIMEOUT)
@@ -180,10 +219,19 @@ async def _ticker_matches_company(name: str, ticker: str) -> bool:
     if not reported:
         return True
 
-    score = fuzz.token_set_ratio(normalize_name(name), normalize_name(reported))
+    norm_name = normalize_name(name)
+
+    # Known common/legal-name aliases (Google↔Alphabet, Facebook↔Meta, …) that
+    # the fuzzy check would wrongly reject.
+    aliases = _TICKER_NAME_ALIASES.get(ticker.strip().upper())
+    if aliases and norm_name in aliases:
+        return True
+
+    # Otherwise fuzzy-match against every name yfinance reports, taking the best.
+    score = max(fuzz.token_set_ratio(norm_name, normalize_name(r)) for r in reported)
     if score < _TICKER_NAME_MATCH_MIN:
         logger.info(
-            f"Ticker validation: '{ticker}' resolves to '{reported}', which does "
+            f"Ticker validation: '{ticker}' resolves to {reported}, which does "
             f"not match requested company '{name}' (score {score}); skipping price."
         )
         return False
@@ -224,7 +272,7 @@ def build_graph(llm: ChatOllama, chroma_tools: list, yfinance_tools: list) -> "C
                 ]
             )
         except Exception:
-            plan = Plan(companies=[], needs_news=True, needs_price=False)
+            plan = Plan(companies=[], needs_news=True)
 
         plan.companies = plan.companies[:_MAX_COMPANIES]
         return {"plan": plan}
@@ -234,14 +282,20 @@ def build_graph(llm: ChatOllama, chroma_tools: list, yfinance_tools: list) -> "C
         question = _latest_user_question(state["messages"])
 
         price_days = max(1, min(plan.price_days or _PRICE_LOOKBACK_DAYS, _MAX_PRICE_DAYS))
+        news_count = max(1, min(plan.news_count or _DEFAULT_NEWS_COUNT, _MAX_NEWS_COUNT))
 
         targets = plan.companies or ([] if not plan.needs_news else [None])
 
         async def get_news(company, label: str) -> str:
             if company:
                 entity = f"{company.name} ({company.ticker})"
-                query = company.news_query.strip() or entity
-                rerank_query = entity
+                focus = company.news_focus.strip()
+                # Entity alone ranks by company-centrality (good for broad
+                # questions); appending a short topic tilts ranking toward that
+                # aspect for specific questions. Kept short on purpose — the
+                # cross-encoder reranker degrades on verbose queries.
+                rerank_query = f"{entity} {focus}" if focus else entity
+                query = rerank_query
                 symbols = company.ticker
             else:
                 query = question
@@ -249,7 +303,9 @@ def build_graph(llm: ChatOllama, chroma_tools: list, yfinance_tools: list) -> "C
                 symbols = ""
             try:
                 result = await asyncio.wait_for(
-                    chroma_tool.ainvoke({"query": query, "symbols": symbols, "rerank_query": rerank_query}),
+                    chroma_tool.ainvoke(
+                        {"query": query, "symbols": symbols, "rerank_query": rerank_query, "top_n": news_count}
+                    ),
                     timeout=_NEWS_TIMEOUT,
                 )
             except TimeoutError:
@@ -284,12 +340,15 @@ def build_graph(llm: ChatOllama, chroma_tools: list, yfinance_tools: list) -> "C
 
         async def gather_company(company) -> str:
             label = f"{company.name} ({company.ticker})" if company else question
+            # Per-company tool selection: a company is fetched news/price based on
+            # its own flags (no-company fallback uses the plan-level news flag).
+            want_news = company.needs_news if company else plan.needs_news
+            want_price = company.needs_price if company else False
+
             subtasks = []
-
-            if plan.needs_news and chroma_tool is not None:
+            if want_news and chroma_tool is not None:
                 subtasks.append(get_news(company, label))
-
-            if plan.needs_price and yfinance_tool is not None and company is not None:
+            if want_price and yfinance_tool is not None and company is not None:
                 subtasks.append(get_price(company, label))
 
             parts = await asyncio.gather(*subtasks) if subtasks else []

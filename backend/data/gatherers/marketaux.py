@@ -40,6 +40,7 @@ class MarketAuxGatherer(DataGatherer):
 
         self.blacklist = []
         self.uuids = []
+        self.urls = []
 
         self.stats = {
             "duplicates": 0,
@@ -51,6 +52,9 @@ class MarketAuxGatherer(DataGatherer):
 
     def set_uuid(self, uuids: list[str]) -> None:
         self.uuids.extend(uuids)
+
+    def set_urls(self, urls: list[str]) -> None:
+        self.urls.extend(urls)
 
     def _save_raw_json(self, data: dict, base_dir: str | None = None, published_on: str | None = None) -> str:
         if published_on:
@@ -144,15 +148,26 @@ class MarketAuxGatherer(DataGatherer):
 
         cleaned_articles = []
 
+        # Dedup on BOTH uuid and url, seeded from the DB and updated as we accept
+        # articles this run. The articles table is unique on both uuid (PK) and
+        # url, so a known url under a fresh uuid must be treated as a duplicate —
+        # otherwise it gets needlessly re-scraped, silently dropped by SQL's
+        # INSERT OR IGNORE, yet still indexed into Chroma (drifting the two stores).
+        seen_uuids = set(self.uuids)
+        seen_urls = set(self.urls)
+
         for response in data:
             for article in response.get("data", []):
                 entities = []
 
-                if article["uuid"] in self.uuids:
+                uuid = article.get("uuid")
+                url = article.get("url")
+
+                if uuid in seen_uuids or url in seen_urls:
                     self.stats["duplicates"] += 1
                     continue
 
-                if (article["url"] in self.blacklist) or (urlparse(article["url"]).netloc in self.blacklist):
+                if (url in self.blacklist) or (urlparse(url).netloc in self.blacklist):
                     self.stats["blacklisted"] += 1
                     continue
 
@@ -176,6 +191,8 @@ class MarketAuxGatherer(DataGatherer):
                     keywords="No keywords extracted",
                 )
                 cleaned_articles.append(cleaned_article)
+                seen_uuids.add(uuid)
+                seen_urls.add(url)
 
         return cleaned_articles
 

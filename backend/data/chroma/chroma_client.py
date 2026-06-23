@@ -46,10 +46,36 @@ class ChromaClient:
     def get(self, ids):
         return self.collection.get(ids=ids)
 
+    def get_where(self, where: dict) -> dict:
+        """Fetch all documents whose metadata matches `where` (no similarity rank)."""
+        return self.collection.get(where=where, include=["documents", "metadatas"])
+
     def query(self, query_texts, n_results, where, where_document):
         return self.collection.query(
             query_texts=query_texts, n_results=n_results, where=where, where_document=where_document
         )
+
+    def backfill_symbol_flags(self) -> int:
+        """One-time migration: add per-symbol boolean flags (see symbol_flag_key)
+        to existing documents that predate them. Returns the number updated."""
+        from backend.utils import symbol_flag_key
+
+        results = self.collection.get(include=["metadatas"])
+        ids = results.get("ids", [])
+        metas = results.get("metadatas", [])
+
+        updated_ids, updated_metas = [], []
+        for id_, meta in zip(ids, metas, strict=False):
+            symbols = (meta.get("entity_symbols") or "").split(",")
+            flags = {symbol_flag_key(s): True for s in symbols if s.strip() and s.strip().upper() != "NO SYMBOL"}
+            if any(k not in meta for k in flags):
+                updated_ids.append(id_)
+                updated_metas.append({**meta, **flags})
+
+        if updated_ids:
+            self.collection.update(ids=updated_ids, metadatas=updated_metas)
+        logger.info(f"Backfilled symbol flags on {len(updated_ids)} document(s)")
+        return len(updated_ids)
 
     def delete_article(self, article_id: str) -> None:
         results = self.collection.get(where={"article_id": {"$eq": article_id}})

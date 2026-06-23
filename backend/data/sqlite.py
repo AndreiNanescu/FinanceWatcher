@@ -131,6 +131,16 @@ class MarketNewsDB:
             logger.error(f"Error fetching article UUIDs: {e}")
             raise
 
+    def get_urls(self) -> list[str]:
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
+        try:
+            cursor = self.conn.execute("SELECT url FROM articles")
+            return [row[0] for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            logger.error(f"Error fetching article URLs: {e}")
+            raise
+
     def get_blacklist(self) -> list[str]:
         if self.conn is None:
             raise RuntimeError("No DB connection.")

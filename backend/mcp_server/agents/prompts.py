@@ -13,34 +13,43 @@ Given the user's question, identify:
    - ticker — its primary US-listed stock ticker (Apple → AAPL, Nvidia → NVDA,
      Tesla → TSLA, Microsoft → MSFT). If the user already gives a ticker, keep it.
      Always provide your best-known ticker.
-   - news_query — a concise but descriptive news-search phrase for retrieving
-     this company's news, fusing its name with the SPECIFIC topic or intent of
-     the user's question. For a focused question, use focused terms
-     (e.g. "Apple AI strategy, Apple Intelligence, Siri, on-device AI"); for a
-     general "how is it doing" question, use a broad phrase covering recent
-     performance, earnings, products and outlook
-     (e.g. "Microsoft recent performance, earnings, cloud and AI, stock outlook").
-     Always include the company name. Keep it under ~15 words.
-2. needs_news — true if answering requires recent news, events, earnings,
-   announcements, sentiment, or any qualitative company information.
-3. needs_price — true if answering requires stock price, returns, or market
-   performance.
-4. price_days — how many days of recent daily price history to retrieve, chosen
+   - needs_news — whether to fetch NEWS for THIS company. Decide PER COMPANY from
+     what the user asked about IT. True for a general status question about it, or
+     when the user asks about its news/events/sentiment. Set False if the user
+     only asks about that company's price.
+   - needs_price — whether to fetch PRICE for THIS company. True for a general
+     status question about it, or when the user asks about its price/returns/
+     performance. Set False if the user only asks about that company's news.
+   - news_focus — a SHORT topical focus of 2-5 words, set ONLY when the question
+     targets a specific aspect of the company (e.g. "China market risks", "AI
+     strategy", "legal issues", "earnings", "iPhone sales"). It tilts the news
+     ranking toward that topic. Leave it EMPTY ("") for a broad/general "how is
+     it doing / what's happening" question. Pick the single focus of the
+     question; never list multiple topics, and do NOT include the company name.
+2. needs_news — fallback flag used ONLY when no specific company is identified:
+   true if the question still needs general news.
+3. price_days — how many days of recent daily price history to retrieve, chosen
    from the time horizon implied by the question. Use about 7 for "this
    week"/"past week", 30 for "this month"/"recently"/general status questions,
    90 for "this quarter"/"past few months", and up to 365 for "this year"/"year
    to date". When no horizon is stated, use 30. Never exceed 365.
+4. news_count — how many news articles to retrieve per company, based on how
+   broad the question is. Use about 3-4 for a narrow/specific question (e.g.
+   "any legal trouble for Apple?"), 5 for a typical status question, and up to 8
+   for a broad "tell me everything / full rundown" question. When unsure, use 5.
+   Never exceed 15.
 
 Important rules:
-- For general or open-ended questions about how a company is doing, its status,
+- Set each company's needs_news/needs_price from what the user asked about THAT
+  company specifically. Example: "the latest news of Google and the price action
+  of Nvidia" → Google: needs_news true, needs_price false; Nvidia: needs_price
+  true, needs_news false.
+- For a general or open-ended question about how a company is doing, its status,
   outlook, performance, recent developments, or whether to be concerned
-  (e.g. "How is Nvidia doing?", "What's happening with Tesla?", "Update on
-  Microsoft", "Should I worry about Apple after today's news?"), set BOTH
+  (e.g. "How is Nvidia doing?", "What's happening with Tesla?"), set BOTH its
   needs_news AND needs_price to true.
-- Only set a flag to false when that type of information is clearly irrelevant to
-  the question.
 - If no specific company can be identified, return an empty companies list and
-  set needs_news to true.
+  set the top-level needs_news to true.
 """
 
 
@@ -71,8 +80,10 @@ Guidelines:
   was found for that company and base its assessment on price data alone. NEVER
   fill the gap with generic commentary such as "influenced by various factors" or
   "changes in investor sentiment and market conditions".
-- Treat every company the user named with equal depth — if a company's block has
-  news, give it the same level of news coverage as the others.
+- Address EVERY company the user named — never silently drop one. Give each
+  comparable depth. If a company has only price data (no news), or only news (no
+  price), still cover it with whatever is available and briefly note what's
+  missing — do not omit a company just because less was retrieved for it.
 - Every news claim you make MUST carry the article's URL in parentheses, copied
   verbatim from the block (e.g. "(https://...)"). If a development has no URL in
   the block, do not mention it. Do not replace a URL with just a publication or
@@ -87,6 +98,11 @@ Handling the price data (read carefully):
   close and date, the starting close, the percent change over the window, the
   intraday range, and average volume). Use those figures directly — do NOT
   recompute them and do NOT enumerate individual daily prices.
+- If a company's block has NO "Price summary" (e.g. you were only asked about its
+  news), you have NO price data for it: do NOT state any price level, percent
+  change, intraday range, or volume for that company. Discuss it qualitatively
+  from its news only. NEVER take one company's price figures and apply them to
+  another company.
 - That summary is ALL the price information you have. It does NOT include
   year-to-date returns, 52-week highs or lows, all-time highs, market
   capitalization, valuation multiples, dividend yields, or analyst price targets.

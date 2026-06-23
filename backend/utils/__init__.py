@@ -1,4 +1,4 @@
-from .data_structures import Article, Candidate, Entity, NewsDocument, format_sentiment
+from .data_structures import Article, Candidate, Entity, NewsDocument, format_sentiment, symbol_flag_key
 from .exceptions import StopFetching
 from .io_utils import log_args, normalize_name, save_dict_as_json
 from .logger import logger
@@ -19,4 +19,5 @@ __all__ = [
     "logger",
     "normalize_name",
     "save_dict_as_json",
+    "symbol_flag_key",
 ]

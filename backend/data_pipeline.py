@@ -65,9 +65,11 @@ class DataPipeline:
     def _sync_gatherer_to_db(self):
         blacklist = self.db.get_blacklist()
         uuids = self.db.get_uuids()
+        urls = self.db.get_urls()
 
         self.gatherer.set_blacklist(blacklist)
         self.gatherer.set_uuid(uuids)
+        self.gatherer.set_urls(urls)
 
     def process(self) -> None:
         start_time = time.time()

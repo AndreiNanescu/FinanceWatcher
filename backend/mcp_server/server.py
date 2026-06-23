@@ -31,10 +31,19 @@ def _parse_symbols(symbols: str | None) -> list[str] | None:
     return cleaned or None
 
 
-def _run_news_query(query: str, symbols: str | None, rerank_query: str | None) -> str:
+_MAX_TOP_N = 15
+
+
+def _run_news_query(query: str, symbols: str | None, rerank_query: str | None, top_n: int) -> str:
     tickers = _parse_symbols(symbols)
-    logger.info(f"Called query_chroma with query: {query!r}, rerank_query: {rerank_query!r}, symbols: {tickers}")
-    docs = query_service.search(query, tickers=tickers, rerank_query=rerank_query or None)
+    try:
+        top_n = max(1, min(int(top_n), _MAX_TOP_N))
+    except (TypeError, ValueError):
+        top_n = 5
+    logger.info(
+        f"Called query_chroma with query: {query!r}, rerank_query: {rerank_query!r}, symbols: {tickers}, top_n: {top_n}"
+    )
+    docs = query_service.search(query, tickers=tickers, rerank_query=rerank_query or None, top_n_rerank=top_n)
 
     logger.info(f"query_chroma returning {len(docs)} article(s) to the model for query={query!r} symbols={tickers}")
 
@@ -61,14 +70,15 @@ def _run_news_query(query: str, symbols: str | None, rerank_query: str | None) -
         "company or stock symbol. Pass the resolved ticker(s) in `symbols` (comma separated) so "
         "results can be filtered to the right company; `query` is the descriptive free-text search "
         "used for retrieval, and `rerank_query` is an optional short focused query (e.g. the "
-        "company name and ticker) used to re-rank the retrieved candidates."
+        "company name and ticker) used to re-rank the retrieved candidates. `top_n` is how many "
+        "articles to return (more for broad questions, fewer for narrow ones; default 5, max 15)."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
         openWorldHint=True,
     ),
 )
-async def query_chroma(query: str, symbols: str = "", rerank_query: str = "") -> str:
+async def query_chroma(query: str, symbols: str = "", rerank_query: str = "", top_n: int = 5) -> str:
     """
     Queries the Chroma database for news articles matching the provided query string.
 
@@ -78,12 +88,13 @@ async def query_chroma(query: str, symbols: str = "", rerank_query: str = "") ->
             used to filter results to the intended company.
         rerank_query (str): Optional short, focused query used to re-rank the
             retrieved candidates. Falls back to `query` when empty.
+        top_n (int): How many top articles to return (clamped to 1..15).
 
     Returns:
         str: A string containing the concatenated news articles. If no relevant
             news is found, returns a default message.
     """
-    return await asyncio.to_thread(_run_news_query, query, symbols, rerank_query)
+    return await asyncio.to_thread(_run_news_query, query, symbols, rerank_query, top_n)
 
 
 _MAX_PRICE_DAYS = 365

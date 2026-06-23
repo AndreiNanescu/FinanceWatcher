@@ -5,7 +5,7 @@ from langchain_ollama import ChatOllama
 from .agents import build_graph
 
 _MCP_URL = "http://127.0.0.1:8000/sse"
-_MODEL = "llama3.1:8b"
+_MODEL = "qwen2.5:7b"
 
 
 class Agent:
