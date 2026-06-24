@@ -1,33 +1,48 @@
-from llama_index.tools.mcp import BasicMCPClient, McpToolSpec
-from llama_index.core.agent.workflow import FunctionAgent, ToolCall, ToolCallResult
-from llama_index.core.workflow import Context
-from llama_index.llms.ollama import Ollama
+from langchain_core.messages import HumanMessage
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_ollama import ChatOllama
 
-from backend.utils import SYSTEM_PROMPT
+from .agents import build_graph
+
+_MCP_URL = "http://127.0.0.1:8000/sse"
+_MODEL = "qwen2.5:7b"
 
 
 class Agent:
-    def __init__(self):
-        self.mcp_client = BasicMCPClient("http://127.0.0.1:8000/sse", timeout=60)
-        self.llm = Ollama(model='llama3.1:8b', request_timeout=300.0)
+    """
+    Multi-agent orchestrator backed.
+    """
 
-        self.agent = None
-        self.context = None
+    def __init__(self) -> None:
+        self.llm = ChatOllama(model=_MODEL, num_predict=4096, temperature=0.0)
+        self._mcp_client: MultiServerMCPClient | None = None
+        self.graph = None
 
-    async def initialize_tools(self):
-        mcp_tools = await McpToolSpec(client=self.mcp_client).to_tool_list_async()
-        self.agent = FunctionAgent(
-            name='FinanceWatcher Agent',
-            description='An agent that can work with the financial data',
-            tools=mcp_tools,
-            llm=self.llm,
-            system_prompt=SYSTEM_PROMPT,
+    async def initialize_tools(self) -> None:
+        """Connect to the MCP server, load tools, and compile the graph."""
+        self._mcp_client = MultiServerMCPClient({"finance": {"url": _MCP_URL, "transport": "sse"}})
+
+        tools = await self._mcp_client.get_tools()
+        chroma_tools = [t for t in tools if t.name == "get_news_for_company_or_symbol"]
+        yfinance_tools = [t for t in tools if t.name == "fetch_price"]
+
+        self.graph = build_graph(self.llm, chroma_tools, yfinance_tools)
+
+    async def ask(self, message: str, thread_id: str = "default") -> str:
+
+        result = await self.graph.ainvoke(
+            {"messages": [HumanMessage(content=message)]},
+            config={"configurable": {"thread_id": thread_id}},
         )
-        self.context = Context(self.agent)
 
-    async def ask(self, message: str):
-        response = await self.agent.run(message, ctx=self.context)
-        return str(response)
+        for msg in reversed(result["messages"]):
+            content = getattr(msg, "content", "")
+            if isinstance(content, str) and content.strip():
+                return content
+        return "I couldn't generate a response."
 
-    async def __call__(self, message: str):
-        return await self.ask(message=message)
+    async def close(self) -> None:
+        self._mcp_client = None
+
+    async def __call__(self, message: str, thread_id: str = "default") -> str:
+        return await self.ask(message=message, thread_id=thread_id)

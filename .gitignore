@@ -1,5 +1,31 @@
+# Secrets / env
 .env
 .venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Data / model artifacts
 backend/rag/raw
 backend/db/
+backend/data/db/
+backend/data/chroma/db/
 logs/
+
+# Runtime / scraper artifacts
+*.log
+cookies.json
+
+# Editor / IDE
+.idea/
+.vscode/
+
+# Evaluation: large/generated artifacts (keep code + datasets, ignore the rest)
+backend/eval/results/
+backend/eval/datasets/corpus_snapshot/
+backend/eval/datasets/corpus_dump.json
+backend/eval/datasets/retrieval_gold.smoke.json
+backend/eval/_autolabel_smoke.py

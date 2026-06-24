@@ -1,15 +1,12 @@
 import json
 import sqlite3
-
 from dataclasses import asdict
 from datetime import datetime
-
 from pathlib import Path
-from typing import Union, List
-from backend.utils import logger, Article, Entity
 
+from backend.utils import Article, Entity, logger
 
-ARTICLES_TABLE = '''
+ARTICLES_TABLE = """
 CREATE TABLE IF NOT EXISTS articles (
     uuid TEXT PRIMARY KEY,
     title TEXT,
@@ -20,27 +17,27 @@ CREATE TABLE IF NOT EXISTS articles (
     fetched_on TEXT,
     entities_json TEXT -- JSON-encoded list of Entity objects
 );
-'''
+"""
 
-BLACKLIST_TABLE= '''
+BLACKLIST_TABLE = """
 CREATE TABLE IF NOT EXISTS blacklisted_entities (
     url TEXT PRIMARY KEY
 );
-'''
+"""
 
-LAST_UPDATE = '''
+LAST_UPDATE = """
 CREATE TABLE IF NOT EXISTS last_update (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     last_updated TEXT
 );
-'''
+"""
 
 
 class MarketNewsDB:
-    def __init__(self, db_path: Union[Path, str] = None, db_name: str = 'market_news.db'):
+    def __init__(self, db_path: Path | str = None, db_name: str = "market_news.db"):
         if db_path is None:
             root_path = Path(__file__).resolve().parent.parent
-            db_path = root_path / 'db'
+            db_path = root_path / "db"
 
         db_path = Path(db_path)
         db_path.mkdir(parents=True, exist_ok=True)
@@ -95,13 +92,13 @@ class MarketNewsDB:
     def _update_last_updated(self):
         now = datetime.now().strftime("%B %d, %Y at %H:%M")
         self.conn.execute(
-            '''INSERT INTO last_update (id, last_updated)
+            """INSERT INTO last_update (id, last_updated)
                VALUES (1, ?)
-               ON CONFLICT(id) DO UPDATE SET last_updated = excluded.last_updated''',
-            (now,)
+               ON CONFLICT(id) DO UPDATE SET last_updated = excluded.last_updated""",
+            (now,),
         )
 
-    def add(self, articles: Union[Article, List[Article]]) -> None:
+    def add(self, articles: Article | list[Article]) -> None:
         if self.conn is None:
             raise RuntimeError("No DB connection.")
 
@@ -114,17 +111,17 @@ class MarketNewsDB:
         try:
             with self.conn:
                 self.conn.executemany(
-                    '''INSERT OR IGNORE INTO articles 
+                    """INSERT OR IGNORE INTO articles 
                        (uuid, title, description, keywords, url, published_at, fetched_on, entities_json)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                    [self._serialize_article(article) for article in articles]
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    [self._serialize_article(article) for article in articles],
                 )
                 self._update_last_updated()
         except Exception as e:
             logger.error(f"Failed to insert articles: {e}")
             raise
 
-    def get_uuids(self) -> List[str]:
+    def get_uuids(self) -> list[str]:
         if self.conn is None:
             raise RuntimeError("No DB connection.")
         try:
@@ -134,7 +131,17 @@ class MarketNewsDB:
             logger.error(f"Error fetching article UUIDs: {e}")
             raise
 
-    def get_blacklist(self) -> List[str]:
+    def get_urls(self) -> list[str]:
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
+        try:
+            cursor = self.conn.execute("SELECT url FROM articles")
+            return [row[0] for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            logger.error(f"Error fetching article URLs: {e}")
+            raise
+
+    def get_blacklist(self) -> list[str]:
         if self.conn is None:
             raise RuntimeError("No DB connection.")
         try:
@@ -144,7 +151,7 @@ class MarketNewsDB:
             logger.error(f"Error fetching blacklisted URLs: {e}")
             raise
 
-    def add_to_blacklist(self, urls: List[str]) -> None:
+    def add_to_blacklist(self, urls: list[str]) -> None:
         if self.conn is None:
             raise RuntimeError("No DB connection.")
         if not urls:
@@ -153,8 +160,7 @@ class MarketNewsDB:
         try:
             with self.conn:
                 self.conn.executemany(
-                    "INSERT OR IGNORE INTO blacklisted_entities (url) VALUES (?)",
-                    [(url,) for url in urls]
+                    "INSERT OR IGNORE INTO blacklisted_entities (url) VALUES (?)", [(url,) for url in urls]
                 )
         except sqlite3.Error as e:
             logger.error(f"Error inserting blacklisted URLs: {e}")
@@ -177,8 +183,7 @@ class MarketNewsDB:
         try:
             with self.conn:
                 cursor = self.conn.execute(
-                    "DELETE FROM articles WHERE description LIKE ?",
-                    ('%' + description_substring + '%',)
+                    "DELETE FROM articles WHERE description LIKE ?", ("%" + description_substring + "%",)
                 )
                 deleted_count = cursor.rowcount
             logger.info(f"Deleted {deleted_count} articles matching description pattern: {description_substring}")
@@ -186,15 +191,14 @@ class MarketNewsDB:
             logger.error(f"Failed to delete articles by description pattern '{description_substring}': {e}")
             raise
 
-
-    def export_articles_to_json(self, n: int, file_path: Union[str, Path] = "exported_articles.json") -> str:
+    def export_articles_to_json(self, n: int, file_path: str | Path = "exported_articles.json") -> str:
         if self.conn is None:
             raise RuntimeError("No DB connection.")
 
         try:
             cursor = self.conn.execute(
-                "SELECT uuid, title, description, keywords, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC LIMIT ?",
-                (n,)
+                "SELECT uuid, title, description, keywords, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC LIMIT ?",  # noqa: E501
+                (n,),
             )
             rows = cursor.fetchall()
 
@@ -208,7 +212,7 @@ class MarketNewsDB:
                     "url": row[4],
                     "published_at": row[5],
                     "fetched_on": row[6],
-                    "entities": json.loads(row[7]) if row[7] else []
+                    "entities": json.loads(row[7]) if row[7] else [],
                 }
                 articles_list.append(article_dict)
 
@@ -226,13 +230,13 @@ class MarketNewsDB:
             logger.error(f"Failed to export articles to JSON: {e}")
             raise
 
-    def get_articles(self) -> List[Article]:
+    def get_articles(self) -> list[Article]:
         if self.conn is None:
             raise RuntimeError("No DB connection")
 
         try:
             cursor = self.conn.execute(
-                "SELECT uuid, title, description, keywords, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC",
+                "SELECT uuid, title, description, keywords, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC",  # noqa: E501
             )
             rows = cursor.fetchall()
 
@@ -245,10 +249,10 @@ class MarketNewsDB:
 
                 for entity in entities_json:
                     ent = Entity(
-                        symbol=entity['symbol'],
-                        name=entity['name'],
-                        sentiment=entity['sentiment'],
-                        industry=entity['industry']
+                        symbol=entity["symbol"],
+                        name=entity["name"],
+                        sentiment=entity["sentiment"],
+                        industry=entity["industry"],
                     )
                     entities_list.append(ent)
 
@@ -260,7 +264,7 @@ class MarketNewsDB:
                     url=row[4],
                     published_at=row[5],
                     fetched_on=row[6],
-                    entities=entities_list
+                    entities=entities_list,
                 )
 
                 articles_list.append(article)
@@ -276,10 +280,7 @@ class MarketNewsDB:
             raise RuntimeError("No DB connection.")
         try:
             with self.conn:
-                cursor = self.conn.execute(
-                    "DELETE FROM articles WHERE url LIKE ?",
-                    ('%' + pattern + '%',)
-                )
+                cursor = self.conn.execute("DELETE FROM articles WHERE url LIKE ?", ("%" + pattern + "%",))
                 deleted_count = cursor.rowcount
             logger.info(f"Deleted {deleted_count} articles with URL containing: {pattern}")
 

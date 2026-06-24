@@ -1,11 +1,9 @@
-import ollama
 from textwrap import dedent
 
-from backend.data import Querier
+import ollama
 
 
 class Llama3:
-
     @staticmethod
     def summarize(article_text: str) -> str:
         text = article_text.strip()
@@ -44,14 +42,11 @@ class Llama3:
             Write the summary:
         """)
 
-        messages = [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message}
-        ]
+        messages = [{"role": "system", "content": system_message}, {"role": "user", "content": user_message}]
 
-        response = ollama.chat(model='llama3', messages=messages)
+        response = ollama.chat(model="llama3.1:8b", messages=messages)
         return response.message.content.strip()
-    
+
     @staticmethod
     def resummarize(summary_text: str) -> str:
         text = summary_text.strip()
@@ -76,10 +71,7 @@ class Llama3:
             Compressed Summary:
         """)
 
-        messages = [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message}
-        ]
+        messages = [{"role": "system", "content": system_message}, {"role": "user", "content": user_message}]
 
-        response = ollama.chat(model='llama3', messages=messages)
+        response = ollama.chat(model="llama3.1:8b", messages=messages)
         return response.message.content.strip()

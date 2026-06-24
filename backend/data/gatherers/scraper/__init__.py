@@ -1,1 +1,3 @@
-from .scraper_good import ArticleScraper
+from .scraper import ArticleScraper
+
+__all__ = ["ArticleScraper"]

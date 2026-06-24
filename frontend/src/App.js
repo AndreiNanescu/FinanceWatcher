@@ -12,147 +12,73 @@ function Formatter({ text }) {
     }
   };
 
-  const sectionRegex = /\*\*(.+?)\*\*:?\s*([\s\S]*?)(?=(\*\*.+?\*\*:?)|$)/g;
-  const sections = [];
-  let match;
-
-  while ((match = sectionRegex.exec(text)) !== null) {
-    const [, header, body] = match;
-
-    let displayHeader = header;
-    let isNumberedHeader = false;
-    const numberHeaderMatch = header.match(/^(\d+)\.\s*(.+)/);
-    if (numberHeaderMatch) {
-      isNumberedHeader = true;
-      displayHeader = numberHeaderMatch[2];
-    }
-
-    const paragraphs = body
-      .split(/\n{2,}/)
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0);
-
-    sections.push({ header: displayHeader, paragraphs, isNumberedHeader });
-  }
-
-  const referenceRegex = /^\*?(\d+)\*?:\s*\*?(?:url:?\s*)?(https?:\/\/[^\s*]+)\*?/gim;
-  const references = [];
-  let refMatch;
-  while ((refMatch = referenceRegex.exec(text)) !== null) {
-    references.push({ number: refMatch[1], url: refMatch[2] });
-  }
-
-  const replaceUrlsWithLinks = (text) => {
-    const urlRegex = /\*?(?:Source:\s*)?(?:url:?\s*)?(https?:\/\/[^\s*]+)\*?/gi;
-    const parts = [];
+  const renderInline = (line, keyPrefix) => {
+    const boldRegex = /\*\*(.+?)\*\*/g;
+    const segments = [];
     let lastIndex = 0;
     let match;
-    let keyIndex = 0;
-
-    while ((match = urlRegex.exec(text)) !== null) {
+    while ((match = boldRegex.exec(line)) !== null) {
       if (match.index > lastIndex) {
-        parts.push(text.substring(lastIndex, match.index));
+        segments.push({ bold: false, text: line.slice(lastIndex, match.index) });
       }
-      const websiteName = getWebsiteName(match[1]);
-      parts.push(
-        <a
-          key={"link-" + keyIndex}
-          href={match[1]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-modern-dark-accent underline"
-        >
-          {websiteName}
-        </a>
-      );
+      segments.push({ bold: true, text: match[1] });
       lastIndex = match.index + match[0].length;
-      keyIndex++;
     }
-    if (lastIndex < text.length) {
-      parts.push(text.substring(lastIndex));
+    if (lastIndex < line.length) {
+      segments.push({ bold: false, text: line.slice(lastIndex) });
     }
-    return parts;
-  };
 
-  const parseNumberedList = (paragraph) => {
-    const listItemRegex = /^(\d+)\.\s+(.+)/gm;
-    const items = [];
-    let match;
+    const urlRegex = /(https?:\/\/[^\s)]+)/g;
+    const nodes = [];
+    segments.forEach((seg, si) => {
+      let li = 0;
+      let m;
+      let ki = 0;
+      const inner = [];
+      while ((m = urlRegex.exec(seg.text)) !== null) {
+        if (m.index > li) inner.push(seg.text.slice(li, m.index));
+        const url = m[1].replace(/[.,]+$/, "");
+        inner.push(
+          <a
+            key={`${keyPrefix}-${si}-${ki}`}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-modern-dark-accent underline"
+          >
+            {getWebsiteName(url)}
+          </a>
+        );
+        li = m.index + m[1].length;
+        ki++;
+      }
+      if (li < seg.text.length) inner.push(seg.text.slice(li));
 
-    while ((match = listItemRegex.exec(paragraph)) !== null) {
-      const [, number, content] = match;
-      const colonMatch = content.match(/^(.+?):\s*(.+)$/);
-      if (colonMatch) {
-        const title = colonMatch[1];
-        const description = colonMatch[2];
-        items.push(
-          <li key={number}>
-            <strong>{title}:</strong> {replaceUrlsWithLinks(description)}
-          </li>
+      if (seg.bold) {
+        nodes.push(
+          <strong key={`${keyPrefix}-b-${si}`}>{inner}</strong>
         );
       } else {
-        items.push(
-          <li key={number}>{replaceUrlsWithLinks(content)}</li>
-        );
+        nodes.push(...inner);
       }
-    }
+    });
 
-    if (items.length === 0) return null;
-
-    return (
-      <ol className="list-decimal list-inside space-y-1 my-2">
-        {items}
-      </ol>
-    );
+    return nodes;
   };
 
-  return (
-    <div className="text-modern-dark-text-primary text-base leading-relaxed space-y-4">
-      {sections.map(({ header, paragraphs, isNumberedHeader }, idx) => (
-        <div key={idx} className="space-y-2">
-          {!isNumberedHeader && (
-            <h2 className="text-lg font-semibold text-modern-dark-text-primary mt-4">
-              {header}
-            </h2>
-          )}
-          {paragraphs.map((para, i) => {
-            const numberedList = parseNumberedList(para);
-            if (numberedList) {
-              return <div key={i}>{numberedList}</div>;
-            }
-            return (
-              <p key={i} className="whitespace-pre-wrap">
-                {isNumberedHeader ? (
-                  <strong>{header}:</strong>
-                ) : null}{" "}
-                {replaceUrlsWithLinks(para)}
-              </p>
-            );
-          })}
-        </div>
-      ))}
+  // Split the response into paragraphs on blank lines; render each as prose.
+  const paragraphs = (text || "")
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
 
-      {references.length > 0 && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold text-modern-dark-text-primary mt-4">
-            References
-          </h2>
-          <ol className="list-decimal list-inside space-y-1 mt-2">
-            {references.map(({ number, url }) => (
-              <li key={number}>
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-modern-dark-accent underline"
-                >
-                  {getWebsiteName(url)}
-                </a>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
+  return (
+    <div className="text-modern-dark-text-primary text-base leading-relaxed space-y-3">
+      {paragraphs.map((para, i) => (
+        <p key={i} className="whitespace-pre-wrap">
+          {renderInline(para, `p${i}`)}
+        </p>
+      ))}
     </div>
   );
 }
@@ -243,6 +169,18 @@ function App() {
   const chatContainerRef = useRef(null);
   const pollingIntervalId = useRef(null);
   const cancelTypingRef = useRef(null);
+  const sessionId = useRef(
+    (() => {
+      let id = localStorage.getItem("fw_session_id");
+      if (!id) {
+        id =
+          (window.crypto && window.crypto.randomUUID && window.crypto.randomUUID()) ||
+          `sess-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        localStorage.setItem("fw_session_id", id);
+      }
+      return id;
+    })()
+  );
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -265,6 +203,7 @@ function App() {
     try {
       const res = await axios.post("http://localhost:5000/api/chat", {
         message: input,
+        session_id: sessionId.current,
       });
 
       const botResponse = res.data.response || "I couldn't generate a response";
