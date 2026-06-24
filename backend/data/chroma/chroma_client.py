@@ -50,6 +50,13 @@ class ChromaClient:
         """Fetch all documents whose metadata matches `where` (no similarity rank)."""
         return self.collection.get(where=where, include=["documents", "metadatas"])
 
+    def get_where_with_embeddings(self, where: dict) -> dict:
+        """Like get_where, but also returns the stored (normalized) embeddings.
+
+        Used by the C1 cosine-similarity evaluation baseline.
+        """
+        return self.collection.get(where=where, include=["documents", "metadatas", "embeddings"])
+
     def query(self, query_texts, n_results, where, where_document):
         return self.collection.query(
             query_texts=query_texts, n_results=n_results, where=where, where_document=where_document
