@@ -31,4 +31,4 @@ backend/eval/datasets/retrieval_gold.smoke.json
 backend/eval/_autolabel_smoke.py
 
 # Archive: old scripts
-./archive
+.archive/
