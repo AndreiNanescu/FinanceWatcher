@@ -1,0 +1,20 @@
+# Keep the build context lean and the image free of local state.
+.git
+archive/docs
+
+# Virtual envs / package installs (the image builds its own via uv sync)
+backend/.venv
+frontend/node_modules
+frontend/build
+
+# Local data stores, logs, runtime artifacts — never belong in an image
+backend/db
+backend/data/db
+backend/logs
+logs
+*.log
+cookies.json
+
+# Eval artifacts (large, local-only)
+backend/eval/results
+backend/eval/datasets/corpus_snapshot
