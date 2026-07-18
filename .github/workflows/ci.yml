@@ -20,6 +20,9 @@ jobs:
     name: Quality Checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
 
     strategy:
       matrix:
@@ -60,6 +63,9 @@ jobs:
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
 
     strategy:
       matrix:
