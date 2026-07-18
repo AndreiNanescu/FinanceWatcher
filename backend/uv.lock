@@ -144,7 +144,6 @@ dependencies = [
     { name = "langgraph" },
     { name = "lxml", extra = ["html-clean"] },
     { name = "mcp", extra = ["cli"] },
-    { name = "mypy" },
     { name = "newspaper3k" },
     { name = "numpy" },
     { name = "ollama" },
@@ -164,6 +163,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "mypy" },
     { name = "ruff" },
 ]
 
@@ -183,7 +183,6 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.3.0" },
     { name = "lxml", extras = ["html-clean"], specifier = ">=6.0.0" },
     { name = "mcp", extras = ["cli"], specifier = "==1.9.4" },
-    { name = "mypy", specifier = ">=2.3.0" },
     { name = "newspaper3k", specifier = ">=0.2.8" },
     { name = "numpy", specifier = "==2.2.6" },
     { name = "ollama", specifier = "~=0.5.1" },
@@ -202,7 +201,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "ruff", specifier = ">=0.15.18" }]
+dev = [
+    { name = "mypy", specifier = ">=2.3.0" },
+    { name = "ruff", specifier = ">=0.15.18" },
+]
 
 [[package]]
 name = "backoff"
