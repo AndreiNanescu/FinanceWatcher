@@ -16,4 +16,4 @@ server:
   api_port: 5000
   mcp_url: http://127.0.0.1:8000/sse
 marketaux:
-  base_url: https://api:marketaux:com/v1/news/all
+  base_url: https://api.marketaux.com/v1/news/all
