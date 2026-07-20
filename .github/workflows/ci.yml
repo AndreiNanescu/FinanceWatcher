@@ -55,8 +55,12 @@ jobs:
       - name: Run Ruff
         run: uv run ruff check .
 
-#      - name: Run MyPy
-#        run: uv run mypy .
+      - name: Run MyPy
+        # PYTHONUTF8 keeps mypy from dying on non-ASCII output via Windows
+        # consoles (harmless on ubuntu; saves local runs a cryptic crash).
+        env:
+          PYTHONUTF8: "1"
+        run: uv run mypy .
 
       - name: Smoke test
         run: |

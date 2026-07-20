@@ -59,7 +59,7 @@ def table_82() -> str:
 def table_83() -> str:
     e3 = _read("e3_citations.csv")
     accs = [float(r["citation_accuracy"]) for r in e3 if r.get("citation_accuracy") not in (None, "", "None")]
-    cite = round(sum(accs) / len(accs), 4) if accs else "[de completat]"
+    cite = str(round(sum(accs) / len(accs), 4)) if accs else "[de completat]"
     body = [
         ["Acuratețea citărilor", cite],
         ["Fidelitate (E6, manual)", "[de completat]"],
