@@ -3,14 +3,15 @@ import logging
 import os
 import random
 import time
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
 from newspaper import Article as NewsPaperArticle
+from playwright.sync_api import BrowserContext, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-from playwright.sync_api import sync_playwright
 from requests.exceptions import RequestException
 
 from .summarizer import ArticleSummarizer
@@ -68,8 +69,8 @@ class ArticleScraper(ArticleSummarizer):
         super().__init__()
         self.max_retries = max_retries
         self.delay_range = delay_range
-        self.last_request_time = {}
-        self.blacklisted_urls = []
+        self.last_request_time: dict[str, float] = {}
+        self.blacklisted_urls: list[str] = []
         self.ua = UserAgent()
         self.storage_state_path = storage_state_path
         self.headless = headless
@@ -83,7 +84,7 @@ class ArticleScraper(ArticleSummarizer):
         self.browser = self.playwright.chromium.launch(headless=self.headless)
         self.context = self._create_context()
 
-    def _create_context(self, use_storage: bool = True) -> object:
+    def _create_context(self, use_storage: bool = True) -> BrowserContext:
         """Create a new browser context with random settings"""
         # Randomize viewport size for each context
         viewport_width = random.randint(1200, 1920)
@@ -248,7 +249,7 @@ class ArticleScraper(ArticleSummarizer):
                 pass
 
             # Domain-specific handling with improved selectors
-            domain_handlers = {
+            domain_handlers: dict[str, dict[str, Any]] = {
                 "finance.yahoo.com": {
                     "selectors": [
                         "div.caas-body",

@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
@@ -7,11 +9,11 @@ from .device import safe_device
 
 
 class BGEReranker:
-    def __init__(self, model_name: str = "BAAI/bge-reranker-base", device: str = None, verbose: bool = False):
+    def __init__(self, model_name: str = "BAAI/bge-reranker-base", device: str | None = None, verbose: bool = False):
         self.model_name = model_name
         self.device = device or safe_device()
-        self.tokenizer = None
-        self.model = None
+        self.tokenizer: Any = None
+        self.model: Any = None
         self.verbose = verbose
 
         if self.verbose:

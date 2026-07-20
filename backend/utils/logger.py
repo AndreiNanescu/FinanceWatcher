@@ -64,7 +64,7 @@ def setup_logger(name: str = "shared_run_logger", level=logging.DEBUG):
 
     atexit.register(_cleanup)
 
-    logger.log_file_path = LOG_FILE_PATH
+    logger.log_file_path = LOG_FILE_PATH  # type: ignore[attr-defined]  # dynamic attr by design
     return logger
 
 

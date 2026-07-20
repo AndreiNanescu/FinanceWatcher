@@ -3,6 +3,7 @@ import os
 import re
 import sys
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import yfinance as yf
 from mcp.server.fastmcp import FastMCP
@@ -40,7 +41,9 @@ def _run_news_query(query: str, symbols: str | None, rerank_query: str | None, t
     logger.info(
         f"Called query_chroma with query: {query!r}, rerank_query: {rerank_query!r}, symbols: {tickers}, top_n: {top_n}"
     )
-    docs = query_service.search(query, tickers=tickers, rerank_query=rerank_query or None, top_n_rerank=top_n)
+    docs = cast(
+        list[dict], query_service.search(query, tickers=tickers, rerank_query=rerank_query or None, top_n_rerank=top_n)
+    )
 
     logger.info(f"query_chroma returning {len(docs)} article(s) to the model for query={query!r} symbols={tickers}")
 
@@ -118,7 +121,7 @@ def _fetch_price_sync(symbol: str, days: int) -> dict:
     df.index = df.index.strftime("%Y-%m-%d")
     df = df[["Open", "High", "Low", "Close", "Volume"]]
 
-    return df.to_dict(orient="index")
+    return cast(dict, df.to_dict(orient="index"))
 
 
 @mcp.tool(

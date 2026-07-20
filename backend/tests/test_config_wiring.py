@@ -34,6 +34,19 @@ def test_agent_consumes_both_model_roles():
     assert agent.llm_synthesis.model == config.models.synthesis
 
 
+def test_server_clamps_use_the_right_config_knobs():
+    # Importing mcp_server.server loads the embedding model, so this checks the
+    # source text instead. Justified brittleness: the top_n/price_days clamps
+    # have now twice been wired to the WRONG constant (returning 120 articles /
+    # capping price history at 15 days) — value-level tests missed both.
+    from pathlib import Path
+
+    source = (Path(__file__).parent.parent / "mcp_server" / "server.py").read_text(encoding="utf-8")
+    assert "min(int(top_n), config.retrieval.max_top_n)" in source, "top_n must clamp to max_top_n (answer size)"
+    assert "min(days, config.retrieval.max_price_days)" in source, "days must clamp to max_price_days (365)"
+    assert "min(days, config.retrieval.max_top_n)" not in source, "price days wired to the article cap again"
+
+
 def test_top_n_cap_is_answer_sized_not_pool_sized():
     # The MCP tool's top_n clamps how many articles reach the LLM's context —
     # it must exist as its own small config value, distinct from the 120-wide

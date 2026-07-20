@@ -35,7 +35,7 @@ def _ensure_agent() -> bool:
         return True
     with _agent_init_lock:
         if _agent_ready:
-            return True
+            return True  # type: ignore[unreachable]  # double-checked locking; another thread may have set it
         try:
             _run(_agent.initialize_tools())
             _agent_ready = True

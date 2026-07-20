@@ -1,7 +1,7 @@
 import asyncio
 import json
 import re
-from typing import TYPE_CHECKING, Annotated, TypedDict
+from typing import TYPE_CHECKING, Annotated, TypedDict, cast
 
 import yfinance as yf
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -147,8 +147,8 @@ def _strip_markdown(text: str) -> str:
 def _latest_user_question(messages: list) -> str:
     for msg in reversed(messages):
         if isinstance(msg, HumanMessage) or getattr(msg, "type", "") == "human":
-            return msg.content
-    return messages[-1].content if messages else ""
+            return cast(str, msg.content)
+    return cast(str, messages[-1].content) if messages else ""
 
 
 def _recent_history(messages: list, max_turns: int = config.agent.history_turns) -> str:
@@ -259,6 +259,7 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
         except Exception:
             plan = Plan(companies=[], needs_news=True)
 
+        plan = cast(Plan, plan)
         plan.companies = plan.companies[:config.agent.max_companies]
         return {"plan": plan}
 
@@ -269,9 +270,12 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
         price_days = max(1, min(plan.price_days or config.agent.price_lookback_days, config.retrieval.max_price_days))
         news_count = max(1, min(plan.news_count or config.agent.default_news_count, config.agent.max_news_count))
 
-        targets = plan.companies or ([] if not plan.needs_news else [None])
+        targets: list[Company | None] = cast("list[Company | None]", plan.companies) or (
+            [] if not plan.needs_news else [None]
+        )
 
         async def get_news(company, label: str) -> str:
+            assert chroma_tool is not None  # gather_company only schedules news when the tool exists
             if company:
                 entity = f"{company.name} ({company.ticker})"
                 focus = company.news_focus.strip()
@@ -312,6 +316,7 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
                     f"Price: not retrieved — the ticker '{company.ticker}' does not appear to "
                     f"belong to {company.name}, so potentially incorrect price data was withheld."
                 )
+            assert yfinance_tool is not None  # gather_company only schedules price when the tool exists
             try:
                 result = await asyncio.wait_for(
                     yfinance_tool.ainvoke({"symbol": company.ticker, "days": price_days}),
@@ -367,7 +372,7 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
             ]
         )
 
-        content = _strip_markdown((response.content or "").strip())
+        content = _strip_markdown(cast(str, response.content or "").strip())
         if not content:
             content = (
                 "I couldn't find enough information to answer that confidently. "

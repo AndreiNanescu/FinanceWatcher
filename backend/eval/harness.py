@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import cast
 
 # Allow running as `python -m backend.eval.X` (repo root on path) or as a script.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -52,7 +53,7 @@ def make_querier(
 
 
 def load_json(path: str | Path) -> list[dict]:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return cast(list[dict], json.loads(Path(path).read_text(encoding="utf-8")))
 
 
 def ranked_ids(
@@ -72,7 +73,7 @@ def ranked_ids(
         threshold=threshold,
         min_floor=min_floor,
     )
-    return [r["id"] for r in res]
+    return [r["id"] for r in cast(list[dict], res)]
 
 
 def returned_set(querier: Querier, item: dict, threshold: float, top_n: int = 100) -> list[str]:
@@ -86,7 +87,7 @@ def returned_set(querier: Querier, item: dict, threshold: float, top_n: int = 10
         threshold=threshold,
         min_floor=0.0,
     )
-    return [r["id"] for r in res]
+    return [r["id"] for r in cast(list[dict], res)]
 
 
 def write_csv(name: str, rows: list[dict]) -> Path:
