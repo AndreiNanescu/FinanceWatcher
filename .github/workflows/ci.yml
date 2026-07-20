@@ -59,7 +59,7 @@ jobs:
       - name: Smoke test
         run: |
           PYTHONPATH=.. uv run python -c "
-          import backend.app
+          import backend.api.app
           import backend.data_pipeline
           print('Smoke test passed')
           "
