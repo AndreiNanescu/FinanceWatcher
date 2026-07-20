@@ -5,7 +5,6 @@ from pathlib import Path
 
 from .logger import logger
 
-
 RAW_HTML_DIR = Path(__file__).resolve().parent.parent / "data" / "raw_html"
 
 
