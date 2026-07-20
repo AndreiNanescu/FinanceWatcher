@@ -10,6 +10,18 @@ retrieval:
   recency_weight: 0.3
   recency_tau_days: 30
   max_rerank_candidates: 120
+  max_top_n: 15
+  max_price_days: 365
+agent:
+  max_companies: 4
+  price_lookback_days: 30
+  default_news_count: 5
+  max_news_count: 15
+  history_turns: 6
+  news_timeout: 60
+  price_timeout: 20
+  validate_timeout: 10
+  ticker_name_match_min: 60
 ingestion:
   symbols: [AAPL, GOOGL, AMZN, NVDA, TSM, BLK, RTX, SPY, JPM, GS, XOM]
 server:

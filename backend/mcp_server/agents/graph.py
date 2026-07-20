@@ -238,7 +238,7 @@ async def _ticker_matches_company(name: str, ticker: str) -> bool:
     return True
 
 
-def build_graph(llm: ChatOllama, chroma_tools: list, yfinance_tools: list) -> "CompiledStateGraph":
+def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools: list, yfinance_tools: list) -> "CompiledStateGraph":
     """
     Deterministic financial-analysis graph.
 
@@ -257,7 +257,7 @@ def build_graph(llm: ChatOllama, chroma_tools: list, yfinance_tools: list) -> "C
 
     chroma_tool = chroma_tools[0] if chroma_tools else None
     yfinance_tool = yfinance_tools[0] if yfinance_tools else None
-    planner_llm = llm.with_structured_output(Plan)
+    planner_llm_obj = planner_llm.with_structured_output(Plan)
 
 
     async def planner_node(state: AgentState) -> dict:
@@ -265,7 +265,7 @@ def build_graph(llm: ChatOllama, chroma_tools: list, yfinance_tools: list) -> "C
         history = _recent_history(state["messages"])
         user_content = f"Conversation so far:\n{history}\n\nCurrent question: {question}" if history else question
         try:
-            plan = await planner_llm.ainvoke(
+            plan = await planner_llm_obj.ainvoke(
                 [
                     SystemMessage(content=PLANNER_SYSTEM_PROMPT),
                     HumanMessage(content=user_content),
@@ -375,7 +375,7 @@ def build_graph(llm: ChatOllama, chroma_tools: list, yfinance_tools: list) -> "C
             f"price together):\n{context}\n\nWrite the analysis:"
         )
 
-        response = await llm.ainvoke(
+        response = await synthesis_llm.ainvoke(
             [
                 SystemMessage(content=SYNTHESIS_SYSTEM_PROMPT),
                 HumanMessage(content=prompt),

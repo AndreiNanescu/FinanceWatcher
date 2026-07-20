@@ -3,6 +3,7 @@ import re
 import time
 from datetime import UTC, datetime, timedelta
 
+from backend.config import config
 from backend.rag import BGEReranker
 from backend.utils import Candidate, logger, symbol_flag_key
 
@@ -12,12 +13,10 @@ from .chroma_client import ChromaClient
 # where decay = exp(-age_days / tau). So recency adjusts a relevant article's
 # score by at most `weight`, enough to favour fresher news without letting a
 # barely-relevant new article beat a clearly-relevant slightly-older one.
-_RECENCY_WEIGHT = 0.3
-_RECENCY_TAU_DAYS = 30.0
 
 # Cap how many candidates we rerank, to bound CPU cost when a ticker has a lot
 # of articles. We keep the most recent ones before reranking.
-_MAX_RERANK_CANDIDATES = 120
+
 
 
 class Querier:
@@ -25,9 +24,9 @@ class Querier:
         self,
         chroma_client: ChromaClient,
         reranker: BGEReranker,
-        recency_weight: float = _RECENCY_WEIGHT,
-        recency_tau_days: float = _RECENCY_TAU_DAYS,
-        max_rerank_candidates: int = _MAX_RERANK_CANDIDATES,
+        recency_weight: float = config.retrieval.recency_weight,
+        recency_tau_days: float = config.retrieval.recency_tau_days,
+        max_rerank_candidates: int = config.retrieval.max_rerank_candidates,
         use_reranker: bool = True,
     ):
         if chroma_client is None:
@@ -35,8 +34,7 @@ class Querier:
 
         self.reranker = reranker
         self.client = chroma_client
-        # Evaluation/ablation knobs. Defaults match production exactly, so normal
-        # callers are unaffected.
+
         self.recency_weight = recency_weight
         self.recency_tau_days = recency_tau_days
         self.max_rerank_candidates = max_rerank_candidates

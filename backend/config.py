@@ -22,6 +22,20 @@ class RetrievalConfig(BaseModel):
     recency_weight: float = 0.3
     recency_tau_days: float = 30.0
     max_rerank_candidates: int = 120
+    max_top_n: int = 15
+    max_price_days: int = 365
+
+class AgentConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    max_companies: int = 4
+    price_lookback_days: int = 30
+    default_news_count: int = 5
+    max_news_count: int = 15
+    history_turns: int = 6
+    news_timeout: int = 60
+    price_timeout: int = 20
+    validate_timeout: int = 10
+    ticker_name_match_min: int = 60
 
 class IngestionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -40,6 +54,7 @@ class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     models: ModelsConfig
     retrieval: RetrievalConfig = RetrievalConfig()
+    agent: AgentConfig = AgentConfig()
     ingestion: IngestionConfig
     server: ServerConfig
     marketaux: MarketAuxConfig
