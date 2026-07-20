@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from backend.config import config
 from backend.rag import BGEReranker
-from backend.utils import Candidate, logger, symbol_flag_key
+from backend.utils import Candidate, logger, parse_published_at, symbol_flag_key
 
 from .chroma_client import ChromaClient
 
@@ -137,15 +137,7 @@ class Querier:
 
     @staticmethod
     def _parse_published_at(published_at_str: str | None) -> datetime | None:
-        if not published_at_str:
-            return None
-        for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"):
-            try:
-                return datetime.strptime(published_at_str, fmt)
-            except ValueError:
-                continue
-        logger.debug(f"Failed to parse date {published_at_str}")
-        return None
+        return parse_published_at(published_at_str)
 
     def _recency_factor(self, published_at_str: str | None) -> float:
         """Multiplier in [(1 - weight), 1.0]: 1.0 for brand-new, decaying with age."""

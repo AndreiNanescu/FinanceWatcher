@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from textwrap import dedent
 from typing import Any, TypedDict
 
+from .constants import KEYWORDS_LINE_PREFIX
 from .io_utils import normalize_name
 
 
@@ -65,7 +66,7 @@ class NewsDocument:
     def _build_content(article: "Article") -> str:
         return dedent(f"""\
             Title: {article.title}
-            Keywords present: {article.keywords}
+            {KEYWORDS_LINE_PREFIX} {article.keywords}
             Description: {article.description}
         """).strip()
 

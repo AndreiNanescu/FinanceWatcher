@@ -15,22 +15,10 @@ from rapidfuzz import fuzz
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
-from backend.utils import logger, normalize_name
+from backend.config import config
+from backend.utils import NO_NEWS_AVAILABLE_SENTINEL, NO_RELEVANT_NEWS_MESSAGE, logger, normalize_name
 
-from .prompts import PLANNER_SYSTEM_PROMPT, SYNTHESIS_SYSTEM_PROMPT
-
-_MAX_COMPANIES = 4
-_PRICE_LOOKBACK_DAYS = 30
-_MAX_PRICE_DAYS = 365
-_DEFAULT_NEWS_COUNT = 5
-_MAX_NEWS_COUNT = 15
-_HISTORY_TURNS = 6
-
-_NEWS_TIMEOUT = 60
-_PRICE_TIMEOUT = 20
-_VALIDATE_TIMEOUT = 10
-
-_TICKER_NAME_MATCH_MIN = 60
+from .prompts import SYNTHESIS_SYSTEM_PROMPT, build_planner_system_prompt
 
 
 class Company(BaseModel):
@@ -71,14 +59,14 @@ class Plan(BaseModel):
     # per-company news/price selection lives on each Company.
     needs_news: bool = True
     price_days: int = Field(
-        default=_PRICE_LOOKBACK_DAYS,
+        default=config.agent.price_lookback_days,
         description=(
             "Days of recent daily price history to fetch, chosen from the "
             "question's time horizon (7=week, 30=month, 90=quarter, up to 365=year)."
         ),
     )
     news_count: int = Field(
-        default=_DEFAULT_NEWS_COUNT,
+        default=config.agent.default_news_count,
         description=(
             "How many news articles to retrieve per company, based on how broad "
             "the question is: ~3-4 for a narrow/specific question, ~5 for a typical "
@@ -93,11 +81,8 @@ class AgentState(TypedDict):
     sections: list[str]
 
 
-_NO_NEWS_SENTINEL = "no relevant news found"
-
-
 def _is_no_news(result: str) -> bool:
-    return _NO_NEWS_SENTINEL in result.strip().lower()
+    return NO_RELEVANT_NEWS_MESSAGE.lower() in result.strip().lower()
 
 
 def _summarize_prices(label: str, days: int, raw) -> str:
@@ -166,7 +151,7 @@ def _latest_user_question(messages: list) -> str:
     return messages[-1].content if messages else ""
 
 
-def _recent_history(messages: list, max_turns: int = _HISTORY_TURNS) -> str:
+def _recent_history(messages: list, max_turns: int = config.agent.history_turns) -> str:
     """Render the prior turns (excluding the current question) as plain text so
     the planner can resolve follow-ups like "and its price?"."""
     prior = list(messages)
@@ -212,7 +197,7 @@ async def _ticker_matches_company(name: str, ticker: str) -> bool:
         return [n for n in (info.get("longName"), info.get("shortName"), info.get("displayName")) if n]
 
     try:
-        reported = await asyncio.wait_for(asyncio.to_thread(_lookup), timeout=_VALIDATE_TIMEOUT)
+        reported = await asyncio.wait_for(asyncio.to_thread(_lookup), timeout=config.agent.validate_timeout)
     except Exception:
         return True
 
@@ -229,7 +214,7 @@ async def _ticker_matches_company(name: str, ticker: str) -> bool:
 
     # Otherwise fuzzy-match against every name yfinance reports, taking the best.
     score = max(fuzz.token_set_ratio(norm_name, normalize_name(r)) for r in reported)
-    if score < _TICKER_NAME_MATCH_MIN:
+    if score < config.agent.ticker_name_match_min:
         logger.info(
             f"Ticker validation: '{ticker}' resolves to {reported}, which does "
             f"not match requested company '{name}' (score {score}); skipping price."
@@ -267,22 +252,22 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
         try:
             plan = await planner_llm_obj.ainvoke(
                 [
-                    SystemMessage(content=PLANNER_SYSTEM_PROMPT),
+                    SystemMessage(content=build_planner_system_prompt()),
                     HumanMessage(content=user_content),
                 ]
             )
         except Exception:
             plan = Plan(companies=[], needs_news=True)
 
-        plan.companies = plan.companies[:_MAX_COMPANIES]
+        plan.companies = plan.companies[:config.agent.max_companies]
         return {"plan": plan}
 
     async def gather_node(state: AgentState) -> dict:
         plan = state["plan"] or Plan()
         question = _latest_user_question(state["messages"])
 
-        price_days = max(1, min(plan.price_days or _PRICE_LOOKBACK_DAYS, _MAX_PRICE_DAYS))
-        news_count = max(1, min(plan.news_count or _DEFAULT_NEWS_COUNT, _MAX_NEWS_COUNT))
+        price_days = max(1, min(plan.price_days or config.agent.price_lookback_days, config.retrieval.max_price_days))
+        news_count = max(1, min(plan.news_count or config.agent.default_news_count, config.agent.max_news_count))
 
         targets = plan.companies or ([] if not plan.needs_news else [None])
 
@@ -306,7 +291,7 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
                     chroma_tool.ainvoke(
                         {"query": query, "symbols": symbols, "rerank_query": rerank_query, "top_n": news_count}
                     ),
-                    timeout=_NEWS_TIMEOUT,
+                    timeout=config.agent.news_timeout,
                 )
             except TimeoutError:
                 return f"News: retrieval timed out for {label}."
@@ -315,7 +300,7 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
 
             if not result or not str(result).strip() or _is_no_news(str(result)):
                 return (
-                    f"News: NO NEWS AVAILABLE for {label}. No recent news articles were found. "
+                    f"News: {NO_NEWS_AVAILABLE_SENTINEL} for {label}. No recent news articles were found. "
                     f"Do not invent, infer, or speculate about any news for this company — "
                     f"state plainly that no recent news was available and rely on its price data."
                 )
@@ -330,7 +315,7 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
             try:
                 result = await asyncio.wait_for(
                     yfinance_tool.ainvoke({"symbol": company.ticker, "days": price_days}),
-                    timeout=_PRICE_TIMEOUT,
+                    timeout=config.agent.price_timeout,
                 )
             except TimeoutError:
                 return f"Price: retrieval timed out for {label}."
