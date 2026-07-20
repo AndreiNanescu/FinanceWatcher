@@ -1,4 +1,5 @@
 import re
+from typing import Any
 
 from keybert import KeyBERT
 from sentence_transformers import SentenceTransformer
@@ -12,7 +13,7 @@ class ArticleSummarizer:
         self,
         use_better_keybert_model: bool = True,
         max_input_tokens: int = 1024,
-        device: str = None,
+        device: str | None = None,
     ):
         self.llama3 = Llama3()
         self.max_input_tokens = max_input_tokens
@@ -25,7 +26,7 @@ class ArticleSummarizer:
         else:
             self.keyword_extractor = KeyBERT()
 
-    def summarize(self, text: str) -> dict[str, str]:
+    def summarize(self, text: str) -> dict[str, Any]:
         if not text.strip():
             return {"summary": "", "keywords": []}
 

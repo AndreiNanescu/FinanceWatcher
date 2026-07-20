@@ -5,6 +5,7 @@
 
 import argparse
 import asyncio
+from typing import cast
 
 from .harness import DATASETS_DIR, load_json, write_csv
 
@@ -17,16 +18,16 @@ async def _run(gold: list[dict]) -> list[dict]:
     from backend.agents.prompts import build_planner_system_prompt
     from backend.config import config
 
-    llm = ChatOllama(model=config.model.planner, num_predict=4096, temperature=0.0)
+    llm = ChatOllama(model=config.models.planner, num_predict=4096, temperature=0.0)
     planner_llm = llm.with_structured_output(Plan)
 
     rows = []
     for item in gold:
         q = item["question"]
         try:
-            plan: Plan = await planner_llm.ainvoke(
+            plan = cast(Plan, await planner_llm.ainvoke(
                 [SystemMessage(content=build_planner_system_prompt()), HumanMessage(content=q)]
-            )
+            ))
         except Exception as exc:  # noqa: BLE001
             print(f"  planner failed for {q!r}: {exc}")
             continue

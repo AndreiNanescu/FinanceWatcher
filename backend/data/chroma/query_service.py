@@ -2,10 +2,11 @@ import math
 import re
 import time
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from backend.config import config
 from backend.rag import BGEReranker
-from backend.utils import Candidate, logger, parse_published_at, symbol_flag_key
+from backend.utils import logger, parse_published_at, symbol_flag_key
 
 from .chroma_client import ChromaClient
 
@@ -148,7 +149,7 @@ class Querier:
         decay = math.exp(-age_days / self.recency_tau_days)
         return (1.0 - self.recency_weight) + self.recency_weight * decay
 
-    def _execute_query(self, query_text: str, n_results: int, filters: dict | None, contains_text: str | None) -> dict:
+    def _execute_query(self, query_text: str, n_results: int, filters: dict | None, contains_text: str | None) -> Any:
         return self.client.query(
             query_texts=[query_text],
             n_results=n_results,
@@ -175,7 +176,7 @@ class Querier:
         ]
 
     @classmethod
-    def _filter_by_date(cls, candidates: list[Candidate], months: int = 6) -> list[Candidate]:
+    def _filter_by_date(cls, candidates: list[dict], months: int = 6) -> list[dict]:
         cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30 * months)
         filtered = []
         for c in candidates:

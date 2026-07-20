@@ -13,6 +13,7 @@ comparison fair (every system's results are labelled).
 import argparse
 import json
 from pathlib import Path
+from typing import cast
 
 from .harness import DATASETS_DIR, make_querier
 
@@ -79,7 +80,7 @@ def main() -> None:
         for q in (c1, c2, c3):
             res = q.search(rerank_query, tickers=tickers, rerank_query=rerank_query,
                            top_n_rerank=args.pool_k, threshold=0.0, min_floor=0.0)
-            for r in res:
+            for r in cast(list[dict], res):
                 aid = r["id"]
                 if aid and aid not in pool:
                     pool[aid] = {

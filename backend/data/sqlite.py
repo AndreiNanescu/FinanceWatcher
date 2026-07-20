@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS last_update (
 
 
 class MarketNewsDB:
-    def __init__(self, db_path: Path | str = None, db_name: str = "market_news.db"):
+    def __init__(self, db_path: Path | str | None = None, db_name: str = "market_news.db"):
         if db_path is None:
             db_path = DB_DIR
 
@@ -45,7 +45,7 @@ class MarketNewsDB:
         db_path.mkdir(parents=True, exist_ok=True)
         self.db_name = db_path / db_name
 
-        self.conn = None
+        self.conn: sqlite3.Connection | None = None
 
         self._connect_to_db()
         self._create_tables()
@@ -116,6 +116,8 @@ class MarketNewsDB:
         )
 
     def _update_last_updated(self):
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
         now = datetime.now().strftime("%B %d, %Y at %H:%M")
         self.conn.execute(
             """INSERT INTO last_update (id, last_updated)
@@ -305,7 +307,7 @@ class MarketNewsDB:
             for row in rows:
                 entities_list = []
 
-                entities_json = json.loads(row[7] if row[7] else [])
+                entities_json = json.loads(row[7] if row[7] else "[]")
 
                 for entity in entities_json:
                     ent = Entity(

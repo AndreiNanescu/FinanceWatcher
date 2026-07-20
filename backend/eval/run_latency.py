@@ -30,7 +30,7 @@ def run_retrieval_latency(gold: list[dict], warmup: bool = True) -> dict:
             collect_timings=True,
         )
 
-    acc = {s: [] for s in _STAGES}
+    acc: dict[str, list[float]] = {s: [] for s in _STAGES}
     totals = []
     for item in gold:
         sq = item.get("rerank_query") or item["query"]

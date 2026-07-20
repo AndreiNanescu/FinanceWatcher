@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -37,9 +38,9 @@ class MarketAuxGatherer(DataGatherer):
         self.limit = limit
         self.article_scraper = ArticleScraper()
 
-        self.blacklist = []
-        self.uuids = []
-        self.urls = []
+        self.blacklist: list[str] = []
+        self.uuids: list[str] = []
+        self.urls: list[str] = []
 
         self.stats = {
             "duplicates": 0,
@@ -85,7 +86,7 @@ class MarketAuxGatherer(DataGatherer):
             logger.error("Missing environment variables api key or base url")
             return None
 
-        params = {
+        params: dict[str, Any] = {
             "api_token": api_key,
             "symbols": ",".join(self.symbols),
             "language": self.language,
@@ -118,7 +119,7 @@ class MarketAuxGatherer(DataGatherer):
         try:
             response = requests.get(url=url, params=params)
             response.raise_for_status()
-            data = response.json()
+            data: dict[str, Any] = response.json()
 
             articles = data.get("data", [])
             if articles and self.save_data:

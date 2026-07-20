@@ -72,7 +72,7 @@ class NewsDocument:
 
     @staticmethod
     def _build_metadata(article: Article) -> dict[str, Any]:
-        entities = [
+        entities: list[dict[str, str | None]] = [
             {
                 "name": e.name,
                 "symbol": e.symbol,
@@ -82,12 +82,12 @@ class NewsDocument:
             for e in article.entities
         ]
 
-        metadata = {
+        metadata: dict[str, Any] = {
             "published_at": article.published_at,
             "url": article.url,
             "entities": json.dumps(entities),
-            "entity_names": ", ".join(normalize_name(e["name"]) for e in entities),
-            "entity_symbols": ", ".join(e["symbol"] for e in entities),
+            "entity_names": ", ".join(normalize_name(e["name"] or "") for e in entities),
+            "entity_symbols": ", ".join(e["symbol"] or "" for e in entities),
         }
 
         # Per-symbol boolean flags so retrieval can filter by ticker at the DB

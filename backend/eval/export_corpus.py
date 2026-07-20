@@ -28,9 +28,9 @@ _OUT = Path(__file__).resolve().parent / "datasets" / "corpus_dump.json"
 def main() -> None:
     client = ChromaClient()
     res = client.collection.get(include=["documents", "metadatas"])
-    ids = res.get("ids", [])
-    docs = res.get("documents", [])
-    metas = res.get("metadatas", [])
+    ids = res.get("ids") or []
+    docs = res.get("documents") or []
+    metas = res.get("metadatas") or []
 
     rows = []
     for id_, doc, meta in zip(ids, docs, metas, strict=False):
@@ -46,7 +46,7 @@ def main() -> None:
             }
         )
 
-    rows.sort(key=lambda r: r.get("published_at", ""), reverse=True)
+    rows.sort(key=lambda r: str(r.get("published_at") or ""), reverse=True)
     _OUT.parent.mkdir(parents=True, exist_ok=True)
     _OUT.write_text(json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info(f"Exported {len(rows)} articles to {_OUT}")

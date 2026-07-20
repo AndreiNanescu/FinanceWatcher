@@ -1,3 +1,5 @@
+from typing import Any
+
 from langchain_core.messages import HumanMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_ollama import ChatOllama
@@ -16,7 +18,7 @@ class Agent:
         self.llm_planner = ChatOllama(model=config.models.planner, num_predict=4096, temperature=0.0)
         self.llm_synthesis = ChatOllama(model=config.models.synthesis, num_predict=4096, temperature=0.0)
         self._mcp_client: MultiServerMCPClient | None = None
-        self.graph = None
+        self.graph: Any = None
 
     async def initialize_tools(self) -> None:
         """Connect to the MCP server, load tools, and compile the graph."""

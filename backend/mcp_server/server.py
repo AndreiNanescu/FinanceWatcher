@@ -3,6 +3,7 @@ import os
 import re
 import sys
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import yfinance as yf
 from mcp.server.fastmcp import FastMCP
@@ -34,13 +35,15 @@ def _parse_symbols(symbols: str | None) -> list[str] | None:
 def _run_news_query(query: str, symbols: str | None, rerank_query: str | None, top_n: int) -> str:
     tickers = _parse_symbols(symbols)
     try:
-        top_n = max(1, min(int(top_n), config.retrieval.max_rerank_candidates))
+        top_n = max(1, min(int(top_n), config.retrieval.max_top_n))
     except (TypeError, ValueError):
         top_n = 5
     logger.info(
         f"Called query_chroma with query: {query!r}, rerank_query: {rerank_query!r}, symbols: {tickers}, top_n: {top_n}"
     )
-    docs = query_service.search(query, tickers=tickers, rerank_query=rerank_query or None, top_n_rerank=top_n)
+    docs = cast(
+        list[dict], query_service.search(query, tickers=tickers, rerank_query=rerank_query or None, top_n_rerank=top_n)
+    )
 
     logger.info(f"query_chroma returning {len(docs)} article(s) to the model for query={query!r} symbols={tickers}")
 
@@ -99,7 +102,7 @@ def _fetch_price_sync(symbol: str, days: int) -> dict:
         days = int(days)
     except (TypeError, ValueError):
         days = 30
-    days = max(1, min(days, config.retrieval.max_top_n))
+    days = max(1, min(days, config.retrieval.max_price_days))
 
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=days)
@@ -118,7 +121,7 @@ def _fetch_price_sync(symbol: str, days: int) -> dict:
     df.index = df.index.strftime("%Y-%m-%d")
     df = df[["Open", "High", "Low", "Close", "Volume"]]
 
-    return df.to_dict(orient="index")
+    return cast(dict, df.to_dict(orient="index"))
 
 
 @mcp.tool(
