@@ -29,8 +29,8 @@ class IngestionConfig(BaseModel):
 
 class ServerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    api_port: str
-    mcp_url: int
+    api_port: int
+    mcp_url: str
 
 class MarketAuxConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
