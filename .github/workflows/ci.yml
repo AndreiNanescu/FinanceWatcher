@@ -94,8 +94,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Placeholder
-        run: echo "Tests will be added in a future phase."
+      - name: Run pytest
+        run: uv run pytest -q
 
   frontend:
     name: Frontend Build
