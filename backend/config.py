@@ -5,6 +5,15 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict
 
+# Filesystem anchors. config.py lives at the backend package root and does not
+# move, so every data location is derived from here
+BACKEND_DIR = Path(__file__).resolve().parent
+ENV_FILE = BACKEND_DIR / ".env"
+DB_DIR = BACKEND_DIR / "db"
+CHROMA_DATA_DIR = BACKEND_DIR / "data" / "db"
+RAW_HTML_DIR = BACKEND_DIR / "data" / "raw_html"
+LOGS_DIR = BACKEND_DIR / "logs"
+
 
 class ModelsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -62,8 +71,8 @@ class Config(BaseModel):
 
 
 def load_config(path: Path | None = None) -> Config:
-    path = path or Path(__file__).parent / "config.yaml"
-    load_dotenv(Path(__file__).parent / ".env")
+    path = path or BACKEND_DIR / "config.yaml"
+    load_dotenv(ENV_FILE)
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     return Config(**raw, marketaux_api_key=os.getenv("MARKETAUX_API_KEY", ""))

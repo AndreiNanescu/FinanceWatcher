@@ -13,9 +13,9 @@ async def _run(gold: list[dict]) -> list[dict]:
     from langchain_core.messages import HumanMessage, SystemMessage
     from langchain_ollama import ChatOllama
 
-    from backend.config import config
     from backend.agents.graph import Plan
     from backend.agents.prompts import build_planner_system_prompt
+    from backend.config import config
 
     llm = ChatOllama(model=config.model.planner, num_predict=4096, temperature=0.0)
     planner_llm = llm.with_structured_output(Plan)

@@ -1,16 +1,16 @@
 import asyncio
 import atexit
 import threading
-from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from backend.agents.agent import Agent
+from backend.config import ENV_FILE
 from backend.data_pipeline import main as pipeline
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+load_dotenv(ENV_FILE)
 
 app = Flask(__name__)
 CORS(app)

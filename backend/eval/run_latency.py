@@ -52,9 +52,9 @@ async def run_agent_latency(gold: list[dict]) -> dict:
     from langchain_core.messages import HumanMessage, SystemMessage
     from langchain_ollama import ChatOllama
 
-    from backend.config import config
     from backend.agents.graph import Plan
-    from backend.agents.prompts import build_planner_system_prompt, SYNTHESIS_SYSTEM_PROMPT
+    from backend.agents.prompts import SYNTHESIS_SYSTEM_PROMPT, build_planner_system_prompt
+    from backend.config import config
 
     llm = ChatOllama(model=config.models.planner, num_predict=4096, temperature=0.0)
     planner_llm = llm.with_structured_output(Plan)

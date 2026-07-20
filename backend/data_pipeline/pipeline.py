@@ -1,16 +1,16 @@
 import argparse
 import time
 import warnings
-from pathlib import Path
 
 from dotenv import load_dotenv
 
+from backend.config import ENV_FILE
 from backend.data import ChromaClient, Indexer, MarketNewsDB
 from backend.utils import log_args, logger
 
 from .gatherers import MarketAuxGatherer
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+load_dotenv(ENV_FILE)
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 
