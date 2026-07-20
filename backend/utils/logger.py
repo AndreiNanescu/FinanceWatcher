@@ -6,6 +6,8 @@ from pathlib import Path
 
 from tqdm import tqdm
 
+from backend.utils import DATE_FORMAT
+
 LOG_FILE_PATH = None
 
 
@@ -40,7 +42,7 @@ def setup_logger(name: str = "shared_run_logger", level=logging.DEBUG):
 
     formatter = logging.Formatter(
         fmt="%(asctime)s | %(levelname)-8s | %(filename)s:%(lineno)d | %(funcName)s() | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        datefmt=DATE_FORMAT,
     )
 
     stream_handler = TqdmLoggingHandler()
