@@ -1,10 +1,10 @@
 import json
 import logging
-from pathlib import Path
 
 import chromadb
 from chromadb.config import Settings
 
+from backend.config import CHROMA_DATA_DIR
 from backend.rag import Embedder
 from backend.utils import logger, parse_published_at
 
@@ -18,10 +18,7 @@ class ChromaClient:
         self._setup_chroma()
 
     def _init_path(self) -> str:
-        root_path = Path(__file__).resolve().parent.parent
-        chroma_path = root_path / "db" / self.db_name
-
-        return str(chroma_path)
+        return str(CHROMA_DATA_DIR / self.db_name)
 
     def _setup_chroma(self) -> None:
         db_path = self._init_path()

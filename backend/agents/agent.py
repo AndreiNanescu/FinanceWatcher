@@ -4,7 +4,7 @@ from langchain_ollama import ChatOllama
 
 from backend.config import config
 
-from .agents import build_graph
+from .graph import build_graph
 
 
 class Agent:

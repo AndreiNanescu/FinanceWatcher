@@ -4,6 +4,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
+from backend.config import DB_DIR
 from backend.utils import Article, Entity, logger
 
 ARTICLES_TABLE = """
@@ -38,8 +39,7 @@ CREATE TABLE IF NOT EXISTS last_update (
 class MarketNewsDB:
     def __init__(self, db_path: Path | str = None, db_name: str = "market_news.db"):
         if db_path is None:
-            root_path = Path(__file__).resolve().parent.parent
-            db_path = root_path / "db"
+            db_path = DB_DIR
 
         db_path = Path(db_path)
         db_path.mkdir(parents=True, exist_ok=True)

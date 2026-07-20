@@ -27,7 +27,7 @@ def test_agent_consumes_both_model_roles():
     # Planner and synthesis are independently configurable models; both YAML
     # keys must actually reach their ChatOllama instances (a config key that
     # does nothing is a dead flag).
-    from backend.mcp_server.agent import Agent
+    from backend.agents.agent import Agent
 
     agent = Agent()
     assert agent.llm_planner.model == config.models.planner

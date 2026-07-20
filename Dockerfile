@@ -9,6 +9,6 @@ RUN uv sync --frozen
 
 COPY backend/ ./backend/
 
-RUN uv run --no-sync python -c "import backend.app, backend.data_pipeline"
+RUN uv run --no-sync python -c "import backend.api.app, backend.data_pipeline"
 
-CMD ["uv", "run", "--no-sync", "python", "-m", "backend.app"]
+CMD ["uv", "run", "--no-sync", "python", "-m", "backend.api.app"]

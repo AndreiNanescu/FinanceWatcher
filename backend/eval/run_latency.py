@@ -52,11 +52,11 @@ async def run_agent_latency(gold: list[dict]) -> dict:
     from langchain_core.messages import HumanMessage, SystemMessage
     from langchain_ollama import ChatOllama
 
-    from backend.mcp_server.agent import _MODEL
-    from backend.mcp_server.agents.graph import Plan
-    from backend.mcp_server.agents.prompts import PLANNER_SYSTEM_PROMPT, SYNTHESIS_SYSTEM_PROMPT
+    from backend.agents.graph import Plan
+    from backend.agents.prompts import SYNTHESIS_SYSTEM_PROMPT, build_planner_system_prompt
+    from backend.config import config
 
-    llm = ChatOllama(model=_MODEL, num_predict=4096, temperature=0.0)
+    llm = ChatOllama(model=config.models.planner, num_predict=4096, temperature=0.0)
     planner_llm = llm.with_structured_output(Plan)
 
     planner_times, synth_times = [], []
@@ -68,7 +68,7 @@ async def run_agent_latency(gold: list[dict]) -> dict:
         q = item["query"]
         t0 = time.perf_counter()
         try:
-            await planner_llm.ainvoke([SystemMessage(content=PLANNER_SYSTEM_PROMPT), HumanMessage(content=q)])
+            await planner_llm.ainvoke([SystemMessage(content=build_planner_system_prompt()), HumanMessage(content=q)])
         except Exception as exc:  # noqa: BLE001
             print(f"  planner failed for {q!r}: {exc}")
             continue
