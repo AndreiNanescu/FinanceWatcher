@@ -298,7 +298,7 @@ class MarketNewsDB:
 
         try:
             cursor = self.conn.execute(
-                "SELECT uuid, title, description, keywords, url, published_at, fetched_on, entities_json FROM articles ORDER BY published_at DESC",  # noqa: E501
+                "SELECT uuid, title, description, keywords, url, published_at, fetched_on, entities_json, full_text, full_text_status FROM articles ORDER BY published_at DESC",  # noqa: E501
             )
             rows = cursor.fetchall()
 
@@ -327,6 +327,8 @@ class MarketNewsDB:
                     published_at=row[5],
                     fetched_on=row[6],
                     entities=entities_list,
+                    full_text=row[8],
+                    full_text_status=row[9],
                 )
 
                 articles_list.append(article)
@@ -348,4 +350,16 @@ class MarketNewsDB:
 
         except sqlite3.Error as e:
             logger.error(f"Failed to delete articles by URL pattern '{pattern}': {e}")
+            raise
+
+    def count(self) -> int:
+        """Count the number of articles in the collection."""
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
+
+        try:
+            cursor = self.conn.execute("SELECT COUNT(*) FROM articles")
+            return int(cursor.fetchone()[0])
+        except sqlite3.Error as e:
+            logger.error(f"Failed to count articles: {e}")
             raise
