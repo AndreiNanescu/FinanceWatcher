@@ -19,6 +19,7 @@ logs/
 # Runtime / scraper artifacts
 *.log
 cookies.json
+backend/corpus_analysis.json
 
 # Editor / IDE
 .idea/
