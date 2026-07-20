@@ -11,7 +11,7 @@ from mcp.types import ToolAnnotations
 from backend.config import config
 from backend.data import ChromaClient, Querier
 from backend.rag import BGEReranker
-from backend.utils import format_metadata, logger
+from backend.utils import NO_RELEVANT_NEWS_MESSAGE, format_metadata, logger, strip_keywords_line
 
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -45,12 +45,12 @@ def _run_news_query(query: str, symbols: str | None, rerank_query: str | None, t
     logger.info(f"query_chroma returning {len(docs)} article(s) to the model for query={query!r} symbols={tickers}")
 
     if not docs:
-        return "No relevant news found."
+        return NO_RELEVANT_NEWS_MESSAGE
 
     formatted_docs = []
     for item in docs:
         raw_doc = item.get("document", "").strip()
-        cleaned_doc = re.sub(r"^Keywords present:.*(?:\n|$)", "", raw_doc, flags=re.MULTILINE)
+        cleaned_doc = strip_keywords_line(raw_doc)
 
         metadata = item.get("metadata", {})
         metadata_str = format_metadata(metadata)

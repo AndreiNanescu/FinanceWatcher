@@ -1,13 +1,12 @@
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
 
 import chromadb
 from chromadb.config import Settings
 
 from backend.rag import Embedder
-from backend.utils import logger
+from backend.utils import logger, parse_published_at
 
 logging.getLogger("chromadb.telemetry.product.posthog").setLevel(logging.CRITICAL)
 
@@ -103,11 +102,9 @@ class ChromaClient:
 
             pub_at = meta.get("published_at")
             if pub_at:
-                try:
-                    dt = datetime.strptime(pub_at, "%Y-%m-%dT%H:%M:%S.%fZ")
+                dt = parse_published_at(pub_at)
+                if dt is not None:
                     meta["published_at"] = dt.strftime("%b %d, %Y %H:%M UTC")
-                except Exception:
-                    pass
 
             entities_str = meta.get("entities", None)
             try:

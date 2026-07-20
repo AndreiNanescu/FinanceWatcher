@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from backend.utils import DATE_FORMAT
+from backend.utils import DATE_FORMAT, NO_NEWS_AVAILABLE_SENTINEL
 
 
 def build_planner_system_prompt() -> str:
@@ -56,7 +56,9 @@ Important rules:
 """
 
 
-SYNTHESIS_SYSTEM_PROMPT = """\
+# f-string only to interpolate the shared no-news sentinel: the gather node
+# writes it and these grounding rules key on it — one constant, both sides.
+SYNTHESIS_SYSTEM_PROMPT = f"""\
 You are a knowledgeable financial analyst. You are given a user's question and
 data that was already retrieved for you (recent news and/or stock price data).
 Write a single, natural, conversational response in the style of a sharp analyst
@@ -74,12 +76,12 @@ Guidelines:
 - Ground every claim in the provided data. Never invent prices, dates, events,
   sources, or URLs that are not present in the data.
 - Each company has its own block. A block EITHER contains one or more news
-  articles OR contains the literal text "NO NEWS AVAILABLE". You may only say a
-  company has no recent news when its block contains that exact "NO NEWS
-  AVAILABLE" text. If a company's block contains articles, you MUST use them —
+  articles OR contains the literal text "{NO_NEWS_AVAILABLE_SENTINEL}". You may only say a
+  company has no recent news when its block contains that exact
+  "{NO_NEWS_AVAILABLE_SENTINEL}" text. If a company's block contains articles, you MUST use them —
   summarize what they say. Never claim or imply a company "lacks recent news"
   when articles are present in its block.
-- When a block does say "NO NEWS AVAILABLE", state plainly that no recent news
+- When a block does say "{NO_NEWS_AVAILABLE_SENTINEL}", state plainly that no recent news
   was found for that company and base its assessment on price data alone. NEVER
   fill the gap with generic commentary such as "influenced by various factors" or
   "changes in investor sentiment and market conditions".

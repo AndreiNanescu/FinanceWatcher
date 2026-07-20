@@ -16,10 +16,9 @@ if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
 from backend.config import config
-from backend.utils import logger, normalize_name
+from backend.utils import NO_NEWS_AVAILABLE_SENTINEL, NO_RELEVANT_NEWS_MESSAGE, logger, normalize_name
 
-from .prompts import build_planner_system_prompt, SYNTHESIS_SYSTEM_PROMPT
-
+from .prompts import SYNTHESIS_SYSTEM_PROMPT, build_planner_system_prompt
 
 
 class Company(BaseModel):
@@ -60,7 +59,7 @@ class Plan(BaseModel):
     # per-company news/price selection lives on each Company.
     needs_news: bool = True
     price_days: int = Field(
-        default=config.agent.price_days,
+        default=config.agent.price_lookback_days,
         description=(
             "Days of recent daily price history to fetch, chosen from the "
             "question's time horizon (7=week, 30=month, 90=quarter, up to 365=year)."
@@ -82,11 +81,8 @@ class AgentState(TypedDict):
     sections: list[str]
 
 
-_NO_NEWS_SENTINEL = "no relevant news found"
-
-
 def _is_no_news(result: str) -> bool:
-    return _NO_NEWS_SENTINEL in result.strip().lower()
+    return NO_RELEVANT_NEWS_MESSAGE.lower() in result.strip().lower()
 
 
 def _summarize_prices(label: str, days: int, raw) -> str:
@@ -295,7 +291,7 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
                     chroma_tool.ainvoke(
                         {"query": query, "symbols": symbols, "rerank_query": rerank_query, "top_n": news_count}
                     ),
-                    timeout=config.agent.network_timeout,
+                    timeout=config.agent.news_timeout,
                 )
             except TimeoutError:
                 return f"News: retrieval timed out for {label}."
@@ -304,7 +300,7 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
 
             if not result or not str(result).strip() or _is_no_news(str(result)):
                 return (
-                    f"News: NO NEWS AVAILABLE for {label}. No recent news articles were found. "
+                    f"News: {NO_NEWS_AVAILABLE_SENTINEL} for {label}. No recent news articles were found. "
                     f"Do not invent, infer, or speculate about any news for this company — "
                     f"state plainly that no recent news was available and rely on its price data."
                 )
@@ -319,7 +315,7 @@ def build_graph(planner_llm: ChatOllama, synthesis_llm: ChatOllama, chroma_tools
             try:
                 result = await asyncio.wait_for(
                     yfinance_tool.ainvoke({"symbol": company.ticker, "days": price_days}),
-                    timeout=config.agent.price_lookback_days,
+                    timeout=config.agent.price_timeout,
                 )
             except TimeoutError:
                 return f"Price: retrieval timed out for {label}."
