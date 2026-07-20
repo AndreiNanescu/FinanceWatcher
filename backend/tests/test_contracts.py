@@ -58,7 +58,7 @@ def test_strip_keywords_line_only_strips_line_start():
 
 
 def test_empty_retrieval_message_detected_by_gather():
-    from backend.mcp_server.agents.graph import _is_no_news
+    from backend.agents.graph import _is_no_news
 
     assert _is_no_news(NO_RELEVANT_NEWS_MESSAGE)
     assert _is_no_news(f"  {NO_RELEVANT_NEWS_MESSAGE.upper()}  ")  # case/space robust
@@ -66,7 +66,7 @@ def test_empty_retrieval_message_detected_by_gather():
 
 
 def test_no_news_sentinel_reaches_synthesis_rules():
-    from backend.mcp_server.agents.prompts import SYNTHESIS_SYSTEM_PROMPT
+    from backend.agents.prompts import SYNTHESIS_SYSTEM_PROMPT
 
     # The grounding rules must reference the exact sentinel the gather node
     # writes; if either side drifts, permission to say "no recent news" breaks.
@@ -77,7 +77,7 @@ def test_no_news_sentinel_reaches_synthesis_rules():
 
 
 def test_planner_prompt_contains_current_datetime():
-    from backend.mcp_server.agents.prompts import build_planner_system_prompt
+    from backend.agents.prompts import build_planner_system_prompt
 
     before = datetime.now(UTC).strftime("%Y-%m-%d")
     prompt = build_planner_system_prompt()
@@ -88,7 +88,7 @@ def test_planner_prompt_contains_current_datetime():
 
 
 def test_planner_prompt_is_rebuilt_per_call():
-    import backend.mcp_server.agents.prompts as prompts
+    import backend.agents.prompts as prompts
 
     # The bug this guards against: a module-level timestamp frozen at import.
     # A callable rebuilt per request must not be importable as a constant str.

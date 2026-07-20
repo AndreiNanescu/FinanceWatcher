@@ -6,8 +6,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from backend.data import ChromaClient, Indexer, MarketNewsDB
-from backend.data.gatherers import MarketAuxGatherer
 from backend.utils import log_args, logger
+
+from .gatherers import MarketAuxGatherer
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 warnings.filterwarnings("ignore", category=SyntaxWarning)

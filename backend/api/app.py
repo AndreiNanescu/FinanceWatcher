@@ -7,9 +7,8 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from backend.mcp_server.agent import Agent
-
-from .data_pipeline import main as pipeline
+from backend.agents.agent import Agent
+from backend.data_pipeline import main as pipeline
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
