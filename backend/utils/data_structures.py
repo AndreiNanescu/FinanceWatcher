@@ -29,6 +29,7 @@ class Article:
     published_at: str
     fetched_on: str
     entities: list["Entity"]
+    full_text: str | None = None
 
 
 @dataclass

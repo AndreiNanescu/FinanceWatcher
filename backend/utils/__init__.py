@@ -1,6 +1,6 @@
 from .data_structures import Article, Candidate, Entity, NewsDocument, format_sentiment, symbol_flag_key
 from .exceptions import StopFetching
-from .io_utils import log_args, normalize_name, save_dict_as_json
+from .io_utils import log_args, normalize_name, save_dict_as_json, save_raw_html
 from .logger import logger
 from .mcp_utils import format_metadata
 from .string_constants import MARKETAUX_API_KEY_ENV, MARKETAUX_BASE_URL_ENV
@@ -19,5 +19,6 @@ __all__ = [
     "logger",
     "normalize_name",
     "save_dict_as_json",
+    "save_raw_html",
     "symbol_flag_key",
 ]

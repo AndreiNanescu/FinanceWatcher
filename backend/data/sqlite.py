@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS articles (
     url TEXT UNIQUE,
     published_at TEXT,
     fetched_on TEXT,
-    entities_json TEXT -- JSON-encoded list of Entity objects
+    entities_json TEXT, -- JSON-encoded list of Entity objects
+    full_text TEXT, -- full extracted article text (source data; summaries are derived)
+    full_text_status TEXT NOT NULL DEFAULT 'pending' -- pending | ok | failed
 );
 """
 
@@ -47,6 +49,7 @@ class MarketNewsDB:
 
         self._connect_to_db()
         self._create_tables()
+        self._migrate_schema()
 
     def _connect_to_db(self) -> None:
         try:
@@ -70,6 +73,27 @@ class MarketNewsDB:
             logger.error(f"Failed to create tables: {e}")
             raise
 
+    def _migrate_schema(self) -> None:
+        """Add columns introduced after a DB was created (CREATE TABLE IF NOT
+        EXISTS never alters existing tables). Existing rows get the column
+        defaults — full_text_status 'pending' marks them for the backfill."""
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
+        existing = {row[1] for row in self.conn.execute("PRAGMA table_info(articles)")}
+        migrations = {
+            "full_text": "ALTER TABLE articles ADD COLUMN full_text TEXT",
+            "full_text_status": "ALTER TABLE articles ADD COLUMN full_text_status TEXT NOT NULL DEFAULT 'pending'",
+        }
+        try:
+            with self.conn:
+                for column, ddl in migrations.items():
+                    if column not in existing:
+                        self.conn.execute(ddl)
+                        logger.info(f"Migrated articles table: added column '{column}'")
+        except sqlite3.Error as e:
+            logger.error(f"Failed to migrate articles schema: {e}")
+            raise
+
     def close(self) -> None:
         if self.conn:
             self.conn.close()
@@ -87,6 +111,8 @@ class MarketNewsDB:
             article.published_at,
             article.fetched_on,
             entities_json,
+            article.full_text,
+            "ok" if article.full_text else "pending",
         )
 
     def _update_last_updated(self):
@@ -111,14 +137,48 @@ class MarketNewsDB:
         try:
             with self.conn:
                 self.conn.executemany(
-                    """INSERT OR IGNORE INTO articles 
-                       (uuid, title, description, keywords, url, published_at, fetched_on, entities_json)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    """INSERT OR IGNORE INTO articles
+                       (uuid, title, description, keywords, url, published_at, fetched_on, entities_json,
+                        full_text, full_text_status)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     [self._serialize_article(article) for article in articles],
                 )
                 self._update_last_updated()
         except Exception as e:
             logger.error(f"Failed to insert articles: {e}")
+            raise
+
+    def set_full_text(self, uuid: str, full_text: str | None, status: str) -> None:
+        """Upsert the full article text for an existing row (backfill path).
+
+        status: 'ok' when text was fetched, 'failed' when the link is dead or
+        extraction produced nothing — failed rows are not retried by the
+        backfill, so a dead URL is only hammered once.
+        """
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
+        try:
+            with self.conn:
+                self.conn.execute(
+                    "UPDATE articles SET full_text = ?, full_text_status = ? WHERE uuid = ?",
+                    (full_text, status, uuid),
+                )
+        except sqlite3.Error as e:
+            logger.error(f"Failed to set full text for article {uuid}: {e}")
+            raise
+
+    def get_articles_pending_full_text(self) -> list[tuple[str, str]]:
+        """(uuid, url) pairs still needing a full-text fetch, oldest first —
+        the oldest links are the closest to rotting away."""
+        if self.conn is None:
+            raise RuntimeError("No DB connection.")
+        try:
+            cursor = self.conn.execute(
+                "SELECT uuid, url FROM articles WHERE full_text_status = 'pending' ORDER BY published_at ASC"
+            )
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            logger.error(f"Error fetching articles pending full text: {e}")
             raise
 
     def get_uuids(self) -> list[str]:

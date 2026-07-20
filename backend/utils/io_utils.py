@@ -1,8 +1,26 @@
 import json
 import os
+import re
 from pathlib import Path
 
 from .logger import logger
+
+
+RAW_HTML_DIR = Path(__file__).resolve().parent.parent / "data" / "raw_html"
+
+
+def save_raw_html(uuid: str, html: str, base_dir: str | Path | None = None) -> None:
+    """Archive an article's raw HTML keyed by its uuid. Never fatal — the
+    archive is insurance, not a pipeline dependency."""
+    if not html:
+        return
+    try:
+        base = Path(base_dir) if base_dir else RAW_HTML_DIR
+        base.mkdir(parents=True, exist_ok=True)
+        safe_name = re.sub(r"[^\w.-]", "_", uuid)
+        (base / f"{safe_name}.html").write_text(html, encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to archive raw HTML for {uuid}: {e}")
 
 
 def save_dict_as_json(data: dict, filepath: str | Path):
