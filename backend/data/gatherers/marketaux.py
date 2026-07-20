@@ -17,6 +17,7 @@ from backend.utils import (
     logger,
     normalize_name,
     save_dict_as_json,
+    save_raw_html,
 )
 
 from .base import DataGatherer
@@ -365,6 +366,11 @@ class MarketAuxGatherer(DataGatherer):
 
             news_article.description = scraped_data["summary"]
             news_article.keywords = ", ".join(scraped_data["keywords"])
+            # Capture the source text BEFORE it is reduced to a summary; the
+            # summary is derived data, the full text is what future chunking
+            # and re-summarization runs will consume.
+            news_article.full_text = scraped_data.get("full_text")
+            save_raw_html(news_article.uuid, scraped_data.get("raw_html") or "")
 
             expanded_articles.append(news_article)
 
