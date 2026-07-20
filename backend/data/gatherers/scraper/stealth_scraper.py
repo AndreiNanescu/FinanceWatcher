@@ -22,6 +22,40 @@ logger = logging.getLogger(__name__)
 # BeautifulSoup extraction and keep whichever is longer.
 _MIN_NEWSPAPER_LEN = 500
 
+_BOT_PAGE_STRONG_MARKERS = [
+    "misidentified as bots",
+    "misidentified as a bot",
+    "detected unusual activity",
+    "verify you are human",
+    "verifying you are human",
+    "are you a robot",
+    "pardon our interruption",
+    "access to this page has been denied",
+    "checking your browser before",
+    "performance & security by cloudflare",
+    "press & hold to confirm you are",
+]
+_BOT_PAGE_WEAK_MARKERS = [
+    "enable javascript and cookies",
+    "enable cookies and javascript",
+    "please enable javascript",
+    "complete the captcha",
+]
+_BOT_PAGE_WEAK_MAX_LEN = 3000
+
+
+def looks_like_bot_page(text: str | None) -> bool:
+    """True when extracted 'article text' is actually a bot-detection or
+    consent-challenge page rather than editorial content."""
+    if not text:
+        return False
+    lowered = text.lower()
+    if any(marker in lowered for marker in _BOT_PAGE_STRONG_MARKERS):
+        return True
+    if len(text) <= _BOT_PAGE_WEAK_MAX_LEN and any(marker in lowered for marker in _BOT_PAGE_WEAK_MARKERS):
+        return True
+    return False
+
 
 class ArticleScraper(ArticleSummarizer):
     def __init__(
@@ -121,8 +155,13 @@ class ArticleScraper(ArticleSummarizer):
 
         return None
 
-    def _stealth_scrape(self, url: str) -> str | None:
-        """Scrape a webpage using Playwright with stealth techniques"""
+    def _stealth_scrape(self, url: str) -> tuple[str | None, str | None]:
+        """Scrape a webpage using Playwright with stealth techniques.
+
+        Returns (text, raw_html). raw_html may be present even when text
+        extraction failed — the archived HTML lets extraction be re-run later
+        without the link still being alive.
+        """
         context = None
         page = None
 
@@ -335,7 +374,7 @@ class ArticleScraper(ArticleSummarizer):
 
             if not html or len(html) < 500:
                 logger.warning(f"Got minimal or no content from {url}")
-                return None
+                return None, None
 
             # Parse with newspaper3k
             article = NewsPaperArticle(url)
@@ -350,7 +389,7 @@ class ArticleScraper(ArticleSummarizer):
             # Trust newspaper3k only when it found a substantial article; this
             # keeps behavior identical for sites it already handles well.
             if len(np_text) >= _MIN_NEWSPAPER_LEN:
-                return np_text
+                return np_text, html
 
             # Otherwise also try domain-specific BeautifulSoup extraction and keep
             # whichever result is longer (rescues sites like CNBC where
@@ -389,8 +428,8 @@ class ArticleScraper(ArticleSummarizer):
 
             candidates = [t for t in (np_text, bs_text) if t]
             if not candidates:
-                return None
-            return max(candidates, key=len)
+                return None, html
+            return max(candidates, key=len), html
 
         except Exception as e:
             logger.warning(f"Stealth scrape failed for {url}: {str(e)}", exc_info=True)
@@ -402,7 +441,7 @@ class ArticleScraper(ArticleSummarizer):
                     context.close()
             except Exception:
                 pass
-            return None
+            return None, None
 
     def scrape_article(self, url: str) -> dict:
         """Scrape and summarize an article from the given URL"""
@@ -414,20 +453,36 @@ class ArticleScraper(ArticleSummarizer):
             # Try regular download first
             article = self._download_article(url)
 
+            if article and article.text and looks_like_bot_page(article.text):
+                logger.info(f"Regular download of {url} returned a bot-challenge page; escalating to stealth")
+                article = None
+
             if article and article.text and article.text.strip():
                 summary = self.summarize(article.text)
                 if summary.get("summary", "").strip():
+                    # full_text is the exact text the summary was derived from —
+                    # stored as source data so chunking/summarization can be
+                    # re-run after the link dies.
+                    summary["full_text"] = article.text
+                    summary["raw_html"] = article.html
                     return summary
                 else:
                     logger.warning(f"For url: {url}, the summary was empty from regular scrape")
 
             # If regular download fails or returns empty content, use stealth scrape
             logger.info(f"Using stealth scrape for {url}")
-            stealth_article = self._stealth_scrape(url)
+            stealth_article, stealth_html = self._stealth_scrape(url)
 
             if not stealth_article or not stealth_article.strip():
                 logger.warning(f"Couldn't scrape {url} with stealth mode")
                 self.blacklisted_urls.append(url)
+                return {}
+
+            if looks_like_bot_page(stealth_article):
+                # Deliberately NOT blacklisted: bot-blocks are transient (new
+                # fingerprint next run may pass), and the article never reaches
+                # the DB, so the next pipeline run retries it as new.
+                logger.warning(f"Stealth scrape of {url} also returned a bot-challenge page; skipping article")
                 return {}
 
             summary = self.summarize(stealth_article)
@@ -437,12 +492,52 @@ class ArticleScraper(ArticleSummarizer):
                 self.blacklisted_urls.append(url)
                 return {}
 
+            summary["full_text"] = stealth_article
+            summary["raw_html"] = stealth_html
             return summary
 
         except Exception as e:
             logger.warning(f"Scrape failed for {url}: {e}")
             self.blacklisted_urls.append(url)
             return {}
+
+    def fetch_article_text(self, url: str) -> tuple[str | None, str | None]:
+        """Fetch and extract an article's full text WITHOUT summarizing.
+
+        Backfill entry point. Returns (text, raw_html); either may be None.
+        Mirrors scrape_article's escalation (regular download, stealth
+        fallback when the regular text looks like a blurb) but never touches
+        the blacklist — a dead link during backfill is recorded in the DB
+        status, not treated as a scraping ban.
+        """
+        try:
+            article = self._download_article(url)
+        except Exception as e:
+            logger.debug(f"Regular download failed for {url}: {e}")
+            article = None
+
+        text = (article.text or "").strip() if article and article.text else ""
+        html = article.html if article else None
+        if looks_like_bot_page(text):
+            logger.info(f"Regular download of {url} returned a bot-challenge page; trying stealth")
+            text, html = "", None
+
+        if len(text) >= _MIN_NEWSPAPER_LEN:
+            return text, html
+
+        stealth_text, stealth_html = self._stealth_scrape(url)
+        stealth_text = (stealth_text or "").strip()
+        if looks_like_bot_page(stealth_text):
+            logger.warning(f"Stealth fetch of {url} also returned a bot-challenge page; treating as failed")
+            stealth_text, stealth_html = "", None
+
+        # Keep whichever extraction recovered more content.
+        candidates = [t for t in (text, stealth_text) if t]
+        if not candidates:
+            return None, stealth_html or html
+        best = max(candidates, key=len)
+        best_html = stealth_html if best == stealth_text else html
+        return best, best_html or stealth_html or html
 
     def get_blacklisted_urls(self) -> list[str]:
         """Get list of blacklisted URLs"""
