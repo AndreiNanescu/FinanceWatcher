@@ -1,11 +1,14 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
-_DATETIME = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+from backend.utils import DATE_FORMAT
 
 
-PLANNER_SYSTEM_PROMPT = f"""\
+def build_planner_system_prompt() -> str:
+    current_datetime = datetime.now(UTC).strftime(DATE_FORMAT)
+
+    return  f"""\
 You are the planning component of a financial analysis assistant.
-Current datetime: {_DATETIME}
+Current datetime: {current_datetime}
 
 Given the user's question, identify:
 1. companies — every company involved. For each company provide:
