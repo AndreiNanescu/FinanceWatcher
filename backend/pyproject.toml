@@ -40,6 +40,7 @@ dependencies = [
 dev = [
     "ruff>=0.15.18",
     "mypy>=2.3.0",
+    "pytest>=9.1.1",
 ]
 
 [[tool.uv.index]]
@@ -90,3 +91,8 @@ pretty = true
 exclude = [
     "^tests/",
 ]
+
+[tool.pytest.ini_options]
+# Tests import the `backend` package, so the repo root must be on sys.path.
+pythonpath = [".."]
+testpaths = ["tests"]

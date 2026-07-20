@@ -8,6 +8,7 @@ import yfinance as yf
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from backend.config import config
 from backend.data import ChromaClient, Querier
 from backend.rag import BGEReranker
 from backend.utils import format_metadata, logger
@@ -30,14 +31,10 @@ def _parse_symbols(symbols: str | None) -> list[str] | None:
     cleaned = [p.strip().upper() for p in parts if p.strip()]
     return cleaned or None
 
-
-_MAX_TOP_N = 15
-
-
 def _run_news_query(query: str, symbols: str | None, rerank_query: str | None, top_n: int) -> str:
     tickers = _parse_symbols(symbols)
     try:
-        top_n = max(1, min(int(top_n), _MAX_TOP_N))
+        top_n = max(1, min(int(top_n), config.retrieval.max_rerank_candidates))
     except (TypeError, ValueError):
         top_n = 5
     logger.info(
@@ -97,15 +94,12 @@ async def query_chroma(query: str, symbols: str = "", rerank_query: str = "", to
     return await asyncio.to_thread(_run_news_query, query, symbols, rerank_query, top_n)
 
 
-_MAX_PRICE_DAYS = 365
-
-
 def _fetch_price_sync(symbol: str, days: int) -> dict:
     try:
         days = int(days)
     except (TypeError, ValueError):
         days = 30
-    days = max(1, min(days, _MAX_PRICE_DAYS))
+    days = max(1, min(days, config.retrieval.max_top_n))
 
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=days)

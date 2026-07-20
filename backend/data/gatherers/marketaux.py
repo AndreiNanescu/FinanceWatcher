@@ -1,4 +1,3 @@
-import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
@@ -7,9 +6,8 @@ import requests
 from rapidfuzz import fuzz
 from tqdm import tqdm
 
+from backend.config import config
 from backend.utils import (
-    MARKETAUX_API_KEY_ENV,
-    MARKETAUX_BASE_URL_ENV,
     Article,
     Entity,
     StopFetching,
@@ -80,11 +78,11 @@ class MarketAuxGatherer(DataGatherer):
         page: int = 1,
     ) -> dict | None:
 
-        api_key = os.getenv(MARKETAUX_API_KEY_ENV)
-        url = os.getenv(MARKETAUX_BASE_URL_ENV)
+        api_key = config.marketaux_api_key
+        url = config.marketaux.base_url
 
         if not api_key or not url:
-            logger.error(f"Missing environment variables {MARKETAUX_API_KEY_ENV} or {MARKETAUX_BASE_URL_ENV}")
+            logger.error("Missing environment variables api key or base url")
             return None
 
         params = {
