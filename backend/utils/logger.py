@@ -2,9 +2,12 @@ import atexit
 import logging
 import sys
 from datetime import datetime
-from pathlib import Path
 
 from tqdm import tqdm
+
+from backend.config import LOGS_DIR
+
+from .constants import DATE_FORMAT
 
 LOG_FILE_PATH = None
 
@@ -40,19 +43,14 @@ def setup_logger(name: str = "shared_run_logger", level=logging.DEBUG):
 
     formatter = logging.Formatter(
         fmt="%(asctime)s | %(levelname)-8s | %(filename)s:%(lineno)d | %(funcName)s() | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        datefmt=DATE_FORMAT,
     )
 
     stream_handler = TqdmLoggingHandler()
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
 
-    try:
-        root_path = Path(__file__).resolve().parent.parent
-    except NameError:
-        root_path = Path.cwd()
-
-    logs_dir = root_path / "logs"
+    logs_dir = LOGS_DIR
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -66,7 +64,7 @@ def setup_logger(name: str = "shared_run_logger", level=logging.DEBUG):
 
     atexit.register(_cleanup)
 
-    logger.log_file_path = LOG_FILE_PATH
+    logger.log_file_path = LOG_FILE_PATH  # type: ignore[attr-defined]  # dynamic attr by design
     return logger
 
 

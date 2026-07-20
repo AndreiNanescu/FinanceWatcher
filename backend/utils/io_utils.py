@@ -3,9 +3,9 @@ import os
 import re
 from pathlib import Path
 
-from .logger import logger
+from backend.config import RAW_HTML_DIR
 
-RAW_HTML_DIR = Path(__file__).resolve().parent.parent / "data" / "raw_html"
+from .logger import logger
 
 
 def save_raw_html(uuid: str, html: str, base_dir: str | Path | None = None) -> None:

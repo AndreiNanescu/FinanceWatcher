@@ -164,7 +164,11 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
+    { name = "pytest" },
     { name = "ruff" },
+    { name = "types-pyyaml" },
+    { name = "types-requests" },
+    { name = "types-tqdm" },
 ]
 
 [package.metadata]
@@ -203,7 +207,11 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=2.3.0" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.15.18" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20260518" },
+    { name = "types-requests", specifier = ">=2.33.0.20260712" },
+    { name = "types-tqdm", specifier = ">=4.69.0.20260720" },
 ]
 
 [[package]]
@@ -817,6 +825,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e4/06/b56dfa750b44e86157093bc8fca0ab81dccbf5260510de4eaf1cb69b5b99/importlib_resources-7.1.0.tar.gz", hash = "sha256:0722d4c6212489c530f2a145a34c0a7a3b4721bc96a15fada5930e2a0b760708", size = 44985, upload-time = "2026-04-12T16:36:09.232Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/db/55a262f3606bebcae07cc14095338471ad7c0bbcaa37707e6f0ee49725b7/importlib_resources-7.1.0-py3-none-any.whl", hash = "sha256:1bd7b48b4088eddb2cd16382150bb515af0bd2c70128194392725f82ad2c96a1", size = 37232, upload-time = "2026-04-12T16:36:08.219Z" },
+]
+
+[[package]]
+name = "iniconfig"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
 ]
 
 [[package]]
@@ -1799,6 +1816,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pluggy"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
 name = "posthog"
 version = "7.20.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1986,6 +2012,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e7/82/28175b2414effca1cdac8dc99f76d660e7a4fb0ceefa4b4ab8f5f6742925/pyproject_hooks-1.2.0.tar.gz", hash = "sha256:1e859bd5c40fae9448642dd871adf459e5e2084186e8d2c2a79a824c970da1f8", size = 19228, upload-time = "2024-09-29T09:24:13.293Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bd/24/12818598c362d7f300f18e74db45963dbcb85150324092410c8b49405e42/pyproject_hooks-1.2.0-py3-none-any.whl", hash = "sha256:9e5c6bfa8dcc30091c74b0cf803c81fdd29d94f01992a7707bc97babb1141913", size = 10216, upload-time = "2024-09-29T09:24:11.978Z" },
+]
+
+[[package]]
+name = "pytest"
+version = "9.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c", size = 386536, upload-time = "2026-06-19T10:58:31.347Z" },
 ]
 
 [[package]]
@@ -2543,6 +2585,39 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5e/ed/ef06584ccdd5c410df0837951ecd7e15d9a6144ea1bd4c73cecab1a89891/typer-0.26.7.tar.gz", hash = "sha256:e314a34c617e419c091b2830dda3ea1f257134ff593061a8f5b9717ab8dddb3a", size = 201709, upload-time = "2026-06-03T07:18:06.843Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/24/25/2201973529af2c954de0bb725323c3aaed6d7f0ceee8f550dec9185df013/typer-0.26.7-py3-none-any.whl", hash = "sha256:5c87cfbc5d34491c5346ebf49c23e18d56ccb863268d3a8d592b26087c2f5e58", size = 122456, upload-time = "2026-06-03T07:18:05.732Z" },
+]
+
+[[package]]
+name = "types-pyyaml"
+version = "6.0.12.20260518"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b8/83/4a1afc3fbfcf5b8d46fc390cd95ed6b0dc9010a265f4e9f46314efffa37a/types_pyyaml-6.0.12.20260518.tar.gz", hash = "sha256:d917f83fb38462550338c1297faedd860b3ec83912b96b1e3d73255f7473e466", size = 17850, upload-time = "2026-05-18T06:01:58.675Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/06/a2/c01db32be2ae7d6a1689972f3c492b149ee4e164b12fdfd9f64b50888215/types_pyyaml-6.0.12.20260518-py3-none-any.whl", hash = "sha256:d2150f75a231c9fe9c7463bd29487d93e60bac90400287351384bc2284eba7cd", size = 20312, upload-time = "2026-05-18T06:01:57.368Z" },
+]
+
+[[package]]
+name = "types-requests"
+version = "2.33.0.20260712"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/db/51/703318f7b7be8bee126ec13bf615050f932d0179b8784420f3a0199cc769/types_requests-2.33.0.20260712.tar.gz", hash = "sha256:2141b67ab534a5c5cd2dac5034f2a35f42e699c5bf185eee608c5246a069d7fb", size = 25084, upload-time = "2026-07-12T05:14:20.455Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/e7/010c87f559e216d83f9dc51e939633fd0d0ead3377340181ab0e223cd3b5/types_requests-2.33.0.20260712-py3-none-any.whl", hash = "sha256:de027e28c171d3da529689cbfa023b0b4eab188c8dfa22fd834eebd2cee6e7bb", size = 21392, upload-time = "2026-07-12T05:14:19.616Z" },
+]
+
+[[package]]
+name = "types-tqdm"
+version = "4.69.0.20260720"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "types-requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c8/92/30aa2ade7ce369b90cff1d6142220fdd0841b9ca5ffaf9fc5df0b1ca1a64/types_tqdm-4.69.0.20260720.tar.gz", hash = "sha256:dba6798dfd006a795994b6f1d73f33c5445684d425ce44a8f891e8467643b6ea", size = 18538, upload-time = "2026-07-20T05:27:13.065Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a7/2d/3ad733897cf9f839b74569db6f3305fa17927efa5562696be9dc3616fbbd/types_tqdm-4.69.0.20260720-py3-none-any.whl", hash = "sha256:80fe876d18bcf23c37f711d5dee31ab4d2bc579919f0136745b27a67cf11ae71", size = 24877, upload-time = "2026-07-20T05:27:12.2Z" },
 ]
 
 [[package]]

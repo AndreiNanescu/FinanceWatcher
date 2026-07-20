@@ -1,3 +1,5 @@
+from typing import cast
+
 from sentence_transformers import SentenceTransformer
 
 from backend.utils import logger
@@ -16,7 +18,7 @@ class Embedder:
     def __call__(self, input: list[str]) -> list[list[float]]:
         text_with_prompt = [f"represents: {text}" for text in input]
         embeddings = self.model.encode(text_with_prompt, normalize_embeddings=True)
-        return embeddings.tolist()
+        return cast(list[list[float]], embeddings.tolist())
 
     def embed(self, texts: str | list[str]):
         if isinstance(texts, str):

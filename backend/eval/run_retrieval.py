@@ -4,12 +4,13 @@
 """
 
 import argparse
+from typing import Any
 
 from . import metrics
 from .harness import DATASETS_DIR, load_json, make_querier, ranked_ids, returned_set, write_csv
 
 # C1 = cosine baseline, C2 = reranker w/o recency, C3 = reranker + recency (prod).
-CONFIGS = {
+CONFIGS: dict[str, dict[str, Any]] = {
     "C1_cosine": dict(use_reranker=False, recency_weight=0.0),
     "C2_rerank": dict(use_reranker=True, recency_weight=0.0),
     "C3_rerank_recency": dict(use_reranker=True, recency_weight=0.3),

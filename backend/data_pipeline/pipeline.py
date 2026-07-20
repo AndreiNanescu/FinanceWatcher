@@ -1,15 +1,16 @@
 import argparse
 import time
 import warnings
-from pathlib import Path
 
 from dotenv import load_dotenv
 
+from backend.config import ENV_FILE
 from backend.data import ChromaClient, Indexer, MarketNewsDB
-from backend.data.gatherers import MarketAuxGatherer
 from backend.utils import log_args, logger
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+from .gatherers import MarketAuxGatherer
+
+load_dotenv(ENV_FILE)
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 
@@ -30,15 +31,14 @@ def parse_args():
 class DataPipeline:
     def __init__(
         self,
+        gatherer: MarketAuxGatherer,
+        db: MarketNewsDB,
+        indexer: Indexer,
         days: int = 1,
         max_pages: int = 1,
         published_after: str | None = None,
         published_before: str | None = None,
         start_page: int = 1,
-        gatherer: MarketAuxGatherer | None = None,
-        db: MarketNewsDB | None = None,
-        chroma_client: ChromaClient | None = None,
-        indexer: Indexer | None = None,
     ):
 
         self.days = days
@@ -121,7 +121,6 @@ def main(
         pipeline = DataPipeline(
             gatherer=gatherer,
             db=db,
-            chroma_client=chroma_client,
             indexer=indexer,
             days=days,
             max_pages=max_pages,

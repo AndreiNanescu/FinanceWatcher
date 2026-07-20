@@ -45,6 +45,10 @@ class Llama3:
         messages = [{"role": "system", "content": system_message}, {"role": "user", "content": user_message}]
 
         response = ollama.chat(model="llama3.1:8b", messages=messages)
+
+        if response.message.content is None:
+            return "Llama encountered a problem."
+
         return response.message.content.strip()
 
     @staticmethod
@@ -74,4 +78,8 @@ class Llama3:
         messages = [{"role": "system", "content": system_message}, {"role": "user", "content": user_message}]
 
         response = ollama.chat(model="llama3.1:8b", messages=messages)
+
+        if response.message.content is None:
+            return "Llama encountered a problem."
+
         return response.message.content.strip()

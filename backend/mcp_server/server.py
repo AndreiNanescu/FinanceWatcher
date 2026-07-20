@@ -3,14 +3,16 @@ import os
 import re
 import sys
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import yfinance as yf
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from backend.config import config
 from backend.data import ChromaClient, Querier
 from backend.rag import BGEReranker
-from backend.utils import format_metadata, logger
+from backend.utils import NO_RELEVANT_NEWS_MESSAGE, format_metadata, logger, strip_keywords_line
 
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -30,30 +32,28 @@ def _parse_symbols(symbols: str | None) -> list[str] | None:
     cleaned = [p.strip().upper() for p in parts if p.strip()]
     return cleaned or None
 
-
-_MAX_TOP_N = 15
-
-
 def _run_news_query(query: str, symbols: str | None, rerank_query: str | None, top_n: int) -> str:
     tickers = _parse_symbols(symbols)
     try:
-        top_n = max(1, min(int(top_n), _MAX_TOP_N))
+        top_n = max(1, min(int(top_n), config.retrieval.max_top_n))
     except (TypeError, ValueError):
         top_n = 5
     logger.info(
         f"Called query_chroma with query: {query!r}, rerank_query: {rerank_query!r}, symbols: {tickers}, top_n: {top_n}"
     )
-    docs = query_service.search(query, tickers=tickers, rerank_query=rerank_query or None, top_n_rerank=top_n)
+    docs = cast(
+        list[dict], query_service.search(query, tickers=tickers, rerank_query=rerank_query or None, top_n_rerank=top_n)
+    )
 
     logger.info(f"query_chroma returning {len(docs)} article(s) to the model for query={query!r} symbols={tickers}")
 
     if not docs:
-        return "No relevant news found."
+        return NO_RELEVANT_NEWS_MESSAGE
 
     formatted_docs = []
     for item in docs:
         raw_doc = item.get("document", "").strip()
-        cleaned_doc = re.sub(r"^Keywords present:.*(?:\n|$)", "", raw_doc, flags=re.MULTILINE)
+        cleaned_doc = strip_keywords_line(raw_doc)
 
         metadata = item.get("metadata", {})
         metadata_str = format_metadata(metadata)
@@ -97,15 +97,12 @@ async def query_chroma(query: str, symbols: str = "", rerank_query: str = "", to
     return await asyncio.to_thread(_run_news_query, query, symbols, rerank_query, top_n)
 
 
-_MAX_PRICE_DAYS = 365
-
-
 def _fetch_price_sync(symbol: str, days: int) -> dict:
     try:
         days = int(days)
     except (TypeError, ValueError):
         days = 30
-    days = max(1, min(days, _MAX_PRICE_DAYS))
+    days = max(1, min(days, config.retrieval.max_price_days))
 
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=days)
@@ -124,7 +121,7 @@ def _fetch_price_sync(symbol: str, days: int) -> dict:
     df.index = df.index.strftime("%Y-%m-%d")
     df = df[["Open", "High", "Low", "Close", "Volume"]]
 
-    return df.to_dict(orient="index")
+    return cast(dict, df.to_dict(orient="index"))
 
 
 @mcp.tool(

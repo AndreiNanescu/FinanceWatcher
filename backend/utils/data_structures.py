@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from textwrap import dedent
 from typing import Any, TypedDict
 
+from .constants import KEYWORDS_LINE_PREFIX
 from .io_utils import normalize_name
 
 
@@ -65,13 +66,13 @@ class NewsDocument:
     def _build_content(article: "Article") -> str:
         return dedent(f"""\
             Title: {article.title}
-            Keywords present: {article.keywords}
+            {KEYWORDS_LINE_PREFIX} {article.keywords}
             Description: {article.description}
         """).strip()
 
     @staticmethod
     def _build_metadata(article: Article) -> dict[str, Any]:
-        entities = [
+        entities: list[dict[str, str | None]] = [
             {
                 "name": e.name,
                 "symbol": e.symbol,
@@ -81,12 +82,12 @@ class NewsDocument:
             for e in article.entities
         ]
 
-        metadata = {
+        metadata: dict[str, Any] = {
             "published_at": article.published_at,
             "url": article.url,
             "entities": json.dumps(entities),
-            "entity_names": ", ".join(normalize_name(e["name"]) for e in entities),
-            "entity_symbols": ", ".join(e["symbol"] for e in entities),
+            "entity_names": ", ".join(normalize_name(e["name"] or "") for e in entities),
+            "entity_symbols": ", ".join(e["symbol"] or "" for e in entities),
         }
 
         # Per-symbol boolean flags so retrieval can filter by ticker at the DB

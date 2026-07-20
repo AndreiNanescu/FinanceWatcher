@@ -28,7 +28,7 @@ def _context_urls(querier, item: dict) -> set[str]:
 
 
 async def _run(gold: list[dict]) -> list[dict]:
-    from backend.mcp_server.agent import Agent
+    from backend.agents.agent import Agent
 
     agent = Agent()
     await agent.initialize_tools()  # connects to the MCP server

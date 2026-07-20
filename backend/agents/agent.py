@@ -1,11 +1,12 @@
+from typing import Any
+
 from langchain_core.messages import HumanMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_ollama import ChatOllama
 
-from .agents import build_graph
+from backend.config import config
 
-_MCP_URL = "http://127.0.0.1:8000/sse"
-_MODEL = "qwen2.5:7b"
+from .graph import build_graph
 
 
 class Agent:
@@ -14,19 +15,20 @@ class Agent:
     """
 
     def __init__(self) -> None:
-        self.llm = ChatOllama(model=_MODEL, num_predict=4096, temperature=0.0)
+        self.llm_planner = ChatOllama(model=config.models.planner, num_predict=4096, temperature=0.0)
+        self.llm_synthesis = ChatOllama(model=config.models.synthesis, num_predict=4096, temperature=0.0)
         self._mcp_client: MultiServerMCPClient | None = None
-        self.graph = None
+        self.graph: Any = None
 
     async def initialize_tools(self) -> None:
         """Connect to the MCP server, load tools, and compile the graph."""
-        self._mcp_client = MultiServerMCPClient({"finance": {"url": _MCP_URL, "transport": "sse"}})
+        self._mcp_client = MultiServerMCPClient({"finance": {"url": config.server.mcp_url, "transport": "sse"}})
 
         tools = await self._mcp_client.get_tools()
         chroma_tools = [t for t in tools if t.name == "get_news_for_company_or_symbol"]
         yfinance_tools = [t for t in tools if t.name == "fetch_price"]
 
-        self.graph = build_graph(self.llm, chroma_tools, yfinance_tools)
+        self.graph = build_graph(self.llm_planner, self.llm_synthesis, chroma_tools, yfinance_tools)
 
     async def ask(self, message: str, thread_id: str = "default") -> str:
 

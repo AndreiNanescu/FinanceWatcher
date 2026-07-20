@@ -1,4 +1,13 @@
 import json
+import re
+
+from .constants import KEYWORDS_LINE_PREFIX
+
+
+def strip_keywords_line(document: str) -> str:
+    """Remove the keywords line NewsDocument embeds in indexed documents —
+    it aids retrieval matching but is noise for the reading model."""
+    return re.sub(rf"^{re.escape(KEYWORDS_LINE_PREFIX)}.*(?:\n|$)", "", document, flags=re.MULTILINE)
 
 
 def entities_to_text(entities_json_str):

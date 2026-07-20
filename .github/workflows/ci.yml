@@ -1,10 +1,12 @@
 name: CI
 
 on:
+  # pull_request is develop-only: promote PRs into main show the already-green
+  # push-run checks on the same head SHA, so a second identical run would be
+  # pure duplication. Merge commits on both branches are validated by push.
   pull_request:
     branches:
       - develop
-      - main
   # Filtered to the integration branches only: feature-branch pushes trigger
   # nothing here (their open PR covers them), while merge commits — new SHAs
   # no PR check ever ran on — get validated.
@@ -53,13 +55,17 @@ jobs:
       - name: Run Ruff
         run: uv run ruff check .
 
-#      - name: Run MyPy
-#        run: uv run mypy .
+      - name: Run MyPy
+        # PYTHONUTF8 keeps mypy from dying on non-ASCII output via Windows
+        # consoles (harmless on ubuntu; saves local runs a cryptic crash).
+        env:
+          PYTHONUTF8: "1"
+        run: uv run mypy .
 
       - name: Smoke test
         run: |
           PYTHONPATH=.. uv run python -c "
-          import backend.app
+          import backend.api.app
           import backend.data_pipeline
           print('Smoke test passed')
           "
@@ -94,8 +100,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Placeholder
-        run: echo "Tests will be added in a future phase."
+      - name: Run pytest
+        run: uv run pytest -q
 
   frontend:
     name: Frontend Build

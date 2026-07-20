@@ -40,6 +40,10 @@ dependencies = [
 dev = [
     "ruff>=0.15.18",
     "mypy>=2.3.0",
+    "pytest>=9.1.1",
+    "types-requests>=2.33.0.20260712",
+    "types-tqdm>=4.69.0.20260720",
+    "types-pyyaml>=6.0.12.20260518",
 ]
 
 [[tool.uv.index]]
@@ -90,3 +94,19 @@ pretty = true
 exclude = [
     "^tests/",
 ]
+
+# Libraries that ship no type stubs at all; everything else resolves via the
+# types-* dev dependencies.
+[[tool.mypy.overrides]]
+module = [
+    "keybert.*",
+    "newspaper.*",
+    "yfinance.*",
+    "langchain_mcp_adapters.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+# Tests import the `backend` package, so the repo root must be on sys.path.
+pythonpath = [".."]
+testpaths = ["tests"]

@@ -2,9 +2,11 @@ import math
 import re
 import time
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
+from backend.config import config
 from backend.rag import BGEReranker
-from backend.utils import Candidate, logger, symbol_flag_key
+from backend.utils import logger, parse_published_at, symbol_flag_key
 
 from .chroma_client import ChromaClient
 
@@ -12,12 +14,10 @@ from .chroma_client import ChromaClient
 # where decay = exp(-age_days / tau). So recency adjusts a relevant article's
 # score by at most `weight`, enough to favour fresher news without letting a
 # barely-relevant new article beat a clearly-relevant slightly-older one.
-_RECENCY_WEIGHT = 0.3
-_RECENCY_TAU_DAYS = 30.0
 
 # Cap how many candidates we rerank, to bound CPU cost when a ticker has a lot
 # of articles. We keep the most recent ones before reranking.
-_MAX_RERANK_CANDIDATES = 120
+
 
 
 class Querier:
@@ -25,9 +25,9 @@ class Querier:
         self,
         chroma_client: ChromaClient,
         reranker: BGEReranker,
-        recency_weight: float = _RECENCY_WEIGHT,
-        recency_tau_days: float = _RECENCY_TAU_DAYS,
-        max_rerank_candidates: int = _MAX_RERANK_CANDIDATES,
+        recency_weight: float = config.retrieval.recency_weight,
+        recency_tau_days: float = config.retrieval.recency_tau_days,
+        max_rerank_candidates: int = config.retrieval.max_rerank_candidates,
         use_reranker: bool = True,
     ):
         if chroma_client is None:
@@ -35,8 +35,7 @@ class Querier:
 
         self.reranker = reranker
         self.client = chroma_client
-        # Evaluation/ablation knobs. Defaults match production exactly, so normal
-        # callers are unaffected.
+
         self.recency_weight = recency_weight
         self.recency_tau_days = recency_tau_days
         self.max_rerank_candidates = max_rerank_candidates
@@ -139,15 +138,7 @@ class Querier:
 
     @staticmethod
     def _parse_published_at(published_at_str: str | None) -> datetime | None:
-        if not published_at_str:
-            return None
-        for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"):
-            try:
-                return datetime.strptime(published_at_str, fmt)
-            except ValueError:
-                continue
-        logger.debug(f"Failed to parse date {published_at_str}")
-        return None
+        return parse_published_at(published_at_str)
 
     def _recency_factor(self, published_at_str: str | None) -> float:
         """Multiplier in [(1 - weight), 1.0]: 1.0 for brand-new, decaying with age."""
@@ -158,7 +149,7 @@ class Querier:
         decay = math.exp(-age_days / self.recency_tau_days)
         return (1.0 - self.recency_weight) + self.recency_weight * decay
 
-    def _execute_query(self, query_text: str, n_results: int, filters: dict | None, contains_text: str | None) -> dict:
+    def _execute_query(self, query_text: str, n_results: int, filters: dict | None, contains_text: str | None) -> Any:
         return self.client.query(
             query_texts=[query_text],
             n_results=n_results,
@@ -185,7 +176,7 @@ class Querier:
         ]
 
     @classmethod
-    def _filter_by_date(cls, candidates: list[Candidate], months: int = 6) -> list[Candidate]:
+    def _filter_by_date(cls, candidates: list[dict], months: int = 6) -> list[dict]:
         cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30 * months)
         filtered = []
         for c in candidates:
