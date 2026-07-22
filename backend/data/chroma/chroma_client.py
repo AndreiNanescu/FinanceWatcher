@@ -130,3 +130,7 @@ class ChromaClient:
             json.dump(export_data, f, indent=2, ensure_ascii=False)
 
         logger.info(f"Exported {len(export_data)} articles to {output_path} with human-readable formatting.")
+
+    def count(self) -> int:
+        """Count the number of documents in the collection."""
+        return self.collection.count()

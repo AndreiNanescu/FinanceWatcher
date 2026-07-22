@@ -31,6 +31,7 @@ class Article:
     fetched_on: str
     entities: list["Entity"]
     full_text: str | None = None
+    full_text_status: str | None = None
 
 
 @dataclass
